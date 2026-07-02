@@ -1,0 +1,227 @@
+# PaiSmart 全栈部署编排（基础设施 + 后端 + 前端）
+# 使用方式：cp .env.docker.example .env && 填写密钥 && docker compose up -d --build
+# 仅启动基础设施做本地开发请用 docs/docker-compose.yaml
+name: pai_smart
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: paismart-mysql
+    restart: always
+    # 生产环境不建议把数据库端口暴露到公网，调试需要时再打开
+    # ports:
+    #   - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: PaiSmart
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --explicit_defaults_for_timestamp=true --lower_case_table_names=1
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: paismart-redis
+    restart: always
+    # ports:
+    #   - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD} --appendonly yes
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  kafka:
+    image: bitnamilegacy/kafka:latest
+    container_name: paismart-kafka
+    restart: always
+    # EXTERNAL 监听器供宿主机调试使用（localhost:9094），容器间走 kafka:9092
+    # ports:
+    #   - "127.0.0.1:9094:9094"
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_LISTENERS=CONTROLLER://:9093,PLAINTEXT://:9092,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  es:
+    image: elasticsearch:8.10.4
+    container_name: paismart-es
+    restart: always
+    # ports:
+    #   - "127.0.0.1:9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?请在 .env 中设置 ELASTIC_PASSWORD}
+      - node.name=pai-smart-es01
+      - discovery.type=single-node
+      - xpack.license.self_generated.type=basic
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - cluster.name=pai-smart-es-cluster
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms1g -Xmx1g}
+    deploy:
+      resources:
+        limits:
+          memory: ${ES_MEMORY_LIMIT:-2g}
+    # 首次启动自动安装 IK 中文分词插件（需要外网）
+    command: >
+      bash -c "
+      if ! elasticsearch-plugin list | grep -q 'analysis-ik'; then
+        echo 'Installing analysis-ik plugin...';
+        elasticsearch-plugin install --batch https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.10.4.zip;
+      else
+        echo 'analysis-ik plugin already installed.';
+      fi;
+      /usr/local/bin/docker-entrypoint.sh
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: paismart-minio
+    restart: always
+    # 19000 需要对浏览器可达（文件预览/下载走 MINIO_PUBLIC_URL）
+    ports:
+      - "19000:19000"
+      # MinIO 管理控制台，不需要可注释掉
+      - "19001:19001"
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env 中设置 MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":19001" --address ":19000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:19000/minio/health/live || exit 1"]
+      start_period: 10s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    image: paismart-backend
+    container_name: paismart-backend
+    restart: always
+    # 前端容器通过内部网络访问，无需暴露；若宿主机 nginx 需要直连再打开
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8081}:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+      JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx1g}
+
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/PaiSmart?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+      MINIO_ENDPOINT: http://minio:19000
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:19000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-uploads}
+
+      ELASTICSEARCH_HOST: es
+      ELASTICSEARCH_PORT: 9200
+      ELASTICSEARCH_SCHEME: http
+      ELASTICSEARCH_USERNAME: elastic
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD}
+
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?请在 .env 中设置 JWT_SECRET_KEY}
+
+      DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_API_MODEL: ${DEEPSEEK_API_MODEL:-deepseek-chat}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      EMBEDDING_API_MODEL: ${EMBEDDING_API_MODEL:-text-embedding-v4}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+
+      ADMIN_BOOTSTRAP_ENABLED: ${ADMIN_BOOTSTRAP_ENABLED:-false}
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+      ADMIN_BOOTSTRAP_PRIMARY_ORG: ${ADMIN_BOOTSTRAP_PRIMARY_ORG:-default}
+      ADMIN_BOOTSTRAP_ORG_TAGS: ${ADMIN_BOOTSTRAP_ORG_TAGS:-default,admin}
+
+      APP_AUTH_REGISTRATION_MODE: ${APP_AUTH_REGISTRATION_MODE:-INVITE_ONLY}
+      APP_AUTH_INVITE_REQUIRED: ${APP_AUTH_INVITE_REQUIRED:-true}
+
+      SECURITY_ALLOWED_ORIGINS: ${SECURITY_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
+
+      LOG_LEVEL_WEB: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL_AUTOCONFIG: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL_SECURITY: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL_APP: ${LOG_LEVEL_APP:-INFO}
+      LOG_LEVEL_MINIO: ${LOG_LEVEL:-INFO}
+
+      WX_PAY_ENABLE: ${WX_PAY_ENABLE:-false}
+      WX_PAY_APP_ID: ${WX_PAY_APP_ID:-}
+      WX_PAY_MERCHANT_ID: ${WX_PAY_MERCHANT_ID:-}
+      WX_PAY_PRIVATE_KEY: ${WX_PAY_PRIVATE_KEY:-}
+      WX_PAY_MERCHANT_SERIAL_NUMBER: ${WX_PAY_MERCHANT_SERIAL_NUMBER:-}
+      WX_PAY_API_V3_KEY: ${WX_PAY_API_V3_KEY:-}
+      WX_PAY_NOTIFY_URL: ${WX_PAY_NOTIFY_URL:-}
+      WX_PAY_REFUND_NOTIFY_URL: ${WX_PAY_REFUND_NOTIFY_URL:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      es:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    image: paismart-frontend
+    container_name: paismart-frontend
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+  redis-data:
+  kafka-data:
+  es-data:
+  minio-data:
