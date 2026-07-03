@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Component } from 'vue';
-import { mixColor } from '@sa/color';
 import { loginModuleRecord } from '@/constants/app';
 import { useAppStore } from '@/store/modules/app';
 import { useThemeStore } from '@/store/modules/theme';
@@ -37,17 +36,13 @@ const moduleMap: Record<UnionKey.LoginModule, LoginModule> = {
 
 const activeModule = computed(() => moduleMap[props.module || 'pwd-login']);
 const isRegisterModule = computed(() => (props.module || 'pwd-login') === 'register');
-
-const bgColor = computed(() => {
-  const ratio = themeStore.darkMode ? 0.9 : 0;
-
-  return mixColor('#fff', '#000', ratio);
-});
 </script>
 
 <template>
-  <div class="relative size-full flex-center" :style="{ backgroundColor: bgColor }">
-    <NCard :bordered="false" class="relative z-4 w-auto card-wrapper">
+  <div class="login-bg relative size-full flex-center overflow-hidden" :class="{ 'login-bg--dark': themeStore.darkMode }">
+    <div class="login-blob login-blob--1"></div>
+    <div class="login-blob login-blob--2"></div>
+    <NCard :bordered="false" class="login-card relative z-4 w-auto card-wrapper">
       <div :class="isRegisterModule ? 'login-panel login-panel--register' : 'login-panel'">
         <header class="flex-y-center justify-between">
           <SystemLogo class="text-64px text-primary lt-sm:text-48px" />
@@ -87,6 +82,51 @@ const bgColor = computed(() => {
 </template>
 
 <style scoped>
+.login-bg {
+  background:
+    radial-gradient(circle at 16% 18%, rgb(var(--primary-color) / 0.16), transparent 42%),
+    radial-gradient(circle at 84% 82%, rgb(var(--primary-color) / 0.12), transparent 46%),
+    #f7fafc;
+}
+
+.login-bg--dark {
+  background:
+    radial-gradient(circle at 16% 18%, rgb(var(--primary-color) / 0.2), transparent 42%),
+    radial-gradient(circle at 84% 82%, rgb(var(--primary-color) / 0.14), transparent 46%),
+    #101014;
+}
+
+.login-blob {
+  position: absolute;
+  z-index: 1;
+  border-radius: 9999px;
+  filter: blur(64px);
+  pointer-events: none;
+  background: rgb(var(--primary-color) / 0.26);
+}
+
+.login-blob--1 {
+  top: -120px;
+  left: -100px;
+  width: 360px;
+  height: 360px;
+}
+
+.login-blob--2 {
+  right: -140px;
+  bottom: -160px;
+  width: 460px;
+  height: 460px;
+  background: rgb(var(--primary-color) / 0.18);
+}
+
+.login-card {
+  border-radius: 16px;
+  box-shadow:
+    0 18px 48px -16px rgb(var(--primary-color) / 0.3),
+    0 8px 24px -12px rgb(0 0 0 / 0.12);
+}
+
 .login-panel {
   width: 400px;
 }
