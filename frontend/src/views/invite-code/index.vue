@@ -1,7 +1,6 @@
 <script setup lang="tsx">
 import type { DataTableColumns, DataTableRowKey, FormRules, PaginationProps, SelectOption } from 'naive-ui';
 import { NButton, NInput, NInputNumber, NPopconfirm, NTag } from 'naive-ui';
-import { buildInviteCodeShareMessage } from '@/constants/invite-channel';
 import {
   fetchCreateInviteCode,
   fetchDeleteInviteCode,
@@ -101,7 +100,7 @@ const mobilePagination = computed(() => ({
 
 const hasCheckedRows = computed(() => checkedRowKeys.value.length > 0);
 
-const inviteShareBaseUrl = 'https://smart.paicoding.com/#/login/register';
+const inviteShareBaseUrl = `${window.location.origin}/#/login/register`;
 
 const columns = computed<DataTableColumns<Api.InviteCode.Item>>(() => [
   {
@@ -145,7 +144,7 @@ const columns = computed<DataTableColumns<Api.InviteCode.Item>>(() => [
             size="tiny"
             quaternary
             onClick={() => {
-              navigator.clipboard.writeText(buildInviteCodeShareMessage(createInviteShareLink(row.code), row.code));
+              navigator.clipboard.writeText(buildInviteShareMessage(createInviteShareLink(row.code), row.code));
               window.$message?.success('邀请话术已复制');
             }}
           >
@@ -245,6 +244,10 @@ function createDefaultModel(): InviteCodeFormModel {
 
 function createInviteShareLink(code: string) {
   return `${inviteShareBaseUrl}?inviteCode=${encodeURIComponent(code)}`;
+}
+
+function buildInviteShareMessage(shareLink: string, inviteCode: string) {
+  return ['RAG知识库邀请注册：', `邀请码：${inviteCode}`, `注册链接：${shareLink}`].join('\n');
 }
 
 async function getData() {

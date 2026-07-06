@@ -170,9 +170,7 @@ const local: App.I18n.Schema = {
     'org-tag': 'Organization Tag',
     'usage-monitor': 'Usage Monitor',
     user: 'User Management',
-    'personal-center': 'Personal Center',
-    recharge: 'Recharge',
-    'recharge-manage': 'Recharge Management'
+    'personal-center': 'Personal Center'
   },
   page: {
     login: {
@@ -217,8 +215,7 @@ const local: App.I18n.Schema = {
         protocol: '《User Agreement》',
         and: 'and',
         policy: '《Privacy Policy》',
-        inviteCodeTip:
-          'This site is invite-only. If you do not have an invite code yet, follow the WeChat official account "沉默王二" and reply with "聪明".'
+        inviteCodeTip: 'This site is invite-only. If you do not have an invite code yet, please contact the administrator.'
       },
       resetPwd: {
         title: 'Reset Password'
