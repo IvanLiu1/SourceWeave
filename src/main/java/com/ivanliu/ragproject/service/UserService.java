@@ -2,7 +2,6 @@ package com.ivanliu.ragproject.service;
 
 import com.ivanliu.ragproject.config.AppAuthProperties;
 import com.ivanliu.ragproject.exception.CustomException;
-import com.ivanliu.ragproject.model.RegistrationMode;
 import com.ivanliu.ragproject.model.OrganizationTag;
 import com.ivanliu.ragproject.model.User;
 import com.ivanliu.ragproject.repository.OrganizationTagRepository;
@@ -71,9 +70,6 @@ public class UserService {
     private AppAuthProperties appAuthProperties;
 
     @Autowired
-    private InviteCodeService inviteCodeService;
-
-    @Autowired
     private UsageQuotaService usageQuotaService;
 
     @Value("${spring.servlet.multipart.max-file-size:50MB}")
@@ -88,12 +84,7 @@ public class UserService {
      */
     @Transactional
     public void registerUser(String username, String password) {
-        registerUser(username, password, null);
-    }
-
-    @Transactional
-    public void registerUser(String username, String password, String inviteCode) {
-        validateRegistrationPolicy(username, inviteCode);
+        validateRegistrationPolicy(username);
         validatePassword(password);
 
         // 检查数据库中是否已存在该用户名
@@ -135,17 +126,10 @@ public class UserService {
         logger.info("User registered successfully with default and private organization tags: {}", username);
     }
 
-    private void validateRegistrationPolicy(String username, String inviteCode) {
-        RegistrationMode mode = appAuthProperties.getRegistration().getMode();
-        boolean inviteRequired = appAuthProperties.getRegistration().isInviteRequired() || mode == RegistrationMode.INVITE_ONLY;
-
-        if (mode == RegistrationMode.CLOSED) {
-            logger.warn("Registration blocked because registration mode is CLOSED, username: {}", username);
+    private void validateRegistrationPolicy(String username) {
+        if (!appAuthProperties.getRegistration().isEnabled()) {
+            logger.warn("Registration blocked because registration is disabled, username: {}", username);
             throw new CustomException("REGISTRATION_CLOSED", HttpStatus.FORBIDDEN);
-        }
-
-        if (inviteRequired) {
-            inviteCodeService.consume(inviteCode, username);
         }
     }
     

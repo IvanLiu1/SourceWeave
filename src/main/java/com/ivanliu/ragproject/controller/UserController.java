@@ -65,7 +65,7 @@ public class UserController {
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "Username and password cannot be empty"));
             }
             
-            userService.registerUser(request.username(), request.password(), request.inviteCode());
+            userService.registerUser(request.username(), request.password());
             LogUtils.logUserOperation(request.username(), "REGISTER", "user_creation", "SUCCESS");
             monitor.end("注册成功");
             
@@ -483,7 +483,7 @@ public class UserController {
 }
 
 // 用户请求记录类
-record UserRequest(String username, String password, String inviteCode) {}
+record UserRequest(String username, String password) {}
 
 // 主组织标签请求记录类
 record PrimaryOrgRequest(String primaryOrg) {}

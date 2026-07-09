@@ -3,7 +3,6 @@ package com.ivanliu.ragproject.service;
 import com.ivanliu.ragproject.config.AppAuthProperties;
 import com.ivanliu.ragproject.exception.CustomException;
 import com.ivanliu.ragproject.model.OrganizationTag;
-import com.ivanliu.ragproject.model.RegistrationMode;
 import com.ivanliu.ragproject.model.User;
 import com.ivanliu.ragproject.repository.OrganizationTagRepository;
 import com.ivanliu.ragproject.repository.UserRepository;
@@ -49,9 +48,6 @@ class UserServiceTest {
     private AppAuthProperties.Registration registration;
 
     @Mock
-    private InviteCodeService inviteCodeService;
-
-    @Mock
     private UsageQuotaService usageQuotaService;
 
     @InjectMocks
@@ -62,8 +58,7 @@ class UserServiceTest {
         MockitoAnnotations.openMocks(this);
         ReflectionTestUtils.setField(userService, "globalUploadMaxFileSize", "50MB");
         when(appAuthProperties.getRegistration()).thenReturn(registration);
-        when(registration.getMode()).thenReturn(RegistrationMode.OPEN);
-        when(registration.isInviteRequired()).thenReturn(false);
+        when(registration.isEnabled()).thenReturn(true);
     }
 
     @Test
@@ -72,7 +67,7 @@ class UserServiceTest {
         when(organizationTagRepository.existsByTagId("DEFAULT")).thenReturn(true);
         when(organizationTagRepository.existsByTagId("PRIVATE_testuser")).thenReturn(false);
 
-        userService.registerUser("testuser", "password123", null);
+        userService.registerUser("testuser", "password123");
 
         verify(userRepository, atLeastOnce()).save(any(User.class));
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
@@ -83,30 +78,17 @@ class UserServiceTest {
         assertEquals("PRIVATE_testuser", savedUser.getPrimaryOrg());
         verify(orgTagCacheService).cacheUserOrgTags("testuser", List.of("DEFAULT", "PRIVATE_testuser"));
         verify(orgTagCacheService).cacheUserPrimaryOrg("testuser", "PRIVATE_testuser");
-        verify(inviteCodeService, never()).consume(anyString(), anyString());
     }
 
     @Test
     void testRegisterUserClosed() {
-        when(registration.getMode()).thenReturn(RegistrationMode.CLOSED);
+        when(registration.isEnabled()).thenReturn(false);
 
         CustomException exception = assertThrows(CustomException.class,
-                () -> userService.registerUser("testuser", "password123", null));
+                () -> userService.registerUser("testuser", "password123"));
 
         assertEquals("REGISTRATION_CLOSED", exception.getMessage());
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
-    }
-
-    @Test
-    void testRegisterUserInviteRequired() {
-        when(registration.getMode()).thenReturn(RegistrationMode.INVITE_ONLY);
-        when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
-        when(organizationTagRepository.existsByTagId("DEFAULT")).thenReturn(true);
-        when(organizationTagRepository.existsByTagId("PRIVATE_testuser")).thenReturn(false);
-
-        userService.registerUser("testuser", "password123", "INVITE-001");
-
-        verify(inviteCodeService, times(1)).consume("INVITE-001", "testuser");
     }
 
     @Test
@@ -114,7 +96,7 @@ class UserServiceTest {
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(new User()));
 
         CustomException exception = assertThrows(CustomException.class,
-                () -> userService.registerUser("testuser", "password123", null));
+                () -> userService.registerUser("testuser", "password123"));
 
         assertEquals("Username already exists", exception.getMessage());
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
@@ -149,14 +131,12 @@ class UserServiceTest {
     @Test
     void testEnsureDefaultOrgRequiresAdminWhenMissing() {
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
-        when(registration.getMode()).thenReturn(RegistrationMode.OPEN);
-        when(registration.isInviteRequired()).thenReturn(false);
 
         when(organizationTagRepository.existsByTagId("DEFAULT")).thenReturn(false);
         when(userRepository.findAll()).thenReturn(List.of());
 
         CustomException exception = assertThrows(CustomException.class,
-                () -> userService.registerUser("testuser", "password123", null));
+                () -> userService.registerUser("testuser", "password123"));
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, exception.getStatus());
     }

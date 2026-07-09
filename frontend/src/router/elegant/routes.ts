@@ -76,18 +76,6 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
-    name: 'invite-code',
-    path: '/invite-code',
-    component: 'layout.base$view.invite-code',
-    meta: {
-      title: 'invite-code',
-      i18nKey: 'route.invite-code',
-      icon: 'solar:key-minimalistic-square-line-duotone',
-      roles: ['ADMIN'],
-      order: 6
-    }
-  },
-  {
     name: 'knowledge-base',
     path: '/knowledge-base',
     component: 'layout.base$view.knowledge-base',

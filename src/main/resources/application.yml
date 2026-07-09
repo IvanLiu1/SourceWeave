@@ -87,11 +87,7 @@ admin:
 app:
   auth:
     registration:
-      # OPEN: 开放注册
-      # INVITE_ONLY: 必须邀请码
-      # CLOSED: 完全关闭注册
-      mode: ${APP_AUTH_REGISTRATION_MODE:OPEN}
-      invite-required: ${APP_AUTH_INVITE_REQUIRED:false}
+      enabled: ${APP_AUTH_REGISTRATION_ENABLED:true}
 
 rate-limit:
   # Redis 限流，用于保护登录、注册、聊天、LLM 和向量接口

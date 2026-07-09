@@ -164,7 +164,6 @@ const local: App.I18n.Schema = {
     'iframe-page': '外链页面',
     chat: '聊天助手',
     'chat-history': '聊天记录',
-    'invite-code': '邀请码管理',
     'knowledge-base': '知识库',
     'model-provider': '模型配置',
     'org-tag': '组织标签',
@@ -183,7 +182,6 @@ const local: App.I18n.Schema = {
         codePlaceholder: '请输入验证码',
         passwordPlaceholder: '请输入密码',
         confirmPasswordPlaceholder: '请再次输入密码',
-        inviteCodePlaceholder: '请输入邀请码',
         codeLogin: '验证码登录',
         confirm: '确定',
         back: '返回',
@@ -215,7 +213,6 @@ const local: App.I18n.Schema = {
         protocol: '《用户协议》',
         and: '和',
         policy: '《隐私权政策》',
-        inviteCodeTip: '当前站点采用邀请码注册。如需邀请码，请联系管理员获取。'
       },
       resetPwd: {
         title: '重置密码'

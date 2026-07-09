@@ -1,6 +1,5 @@
 package com.ivanliu.ragproject.config;
 
-import com.ivanliu.ragproject.model.RegistrationMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -15,23 +14,14 @@ public class AppAuthProperties {
     }
 
     public static class Registration {
-        private RegistrationMode mode = RegistrationMode.INVITE_ONLY;
-        private boolean inviteRequired = true;
+        private boolean enabled = true;
 
-        public RegistrationMode getMode() {
-            return mode;
+        public boolean isEnabled() {
+            return enabled;
         }
 
-        public void setMode(RegistrationMode mode) {
-            this.mode = mode;
-        }
-
-        public boolean isInviteRequired() {
-            return inviteRequired;
-        }
-
-        public void setInviteRequired(boolean inviteRequired) {
-            this.inviteRequired = inviteRequired;
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }
