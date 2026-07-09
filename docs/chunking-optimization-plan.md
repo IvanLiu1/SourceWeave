@@ -58,11 +58,11 @@
 
 ### 改动范围
 
-- `src/main/java/com/yizhaoqi/smartpai/service/ParseService.java`
-- `src/main/java/com/yizhaoqi/smartpai/repository/DocumentVectorRepository.java`
-- `src/main/java/com/yizhaoqi/smartpai/service/VectorizationService.java`
+- `src/main/java/com/ivanliu/ragproject/service/ParseService.java`
+- `src/main/java/com/ivanliu/ragproject/repository/DocumentVectorRepository.java`
+- `src/main/java/com/ivanliu/ragproject/service/VectorizationService.java`
 - `src/main/resources/application*.yml`
-- `src/test/java/com/yizhaoqi/smartpai/service/*ParseService*Test.java`
+- `src/test/java/com/ivanliu/ragproject/service/*ParseService*Test.java`
 
 ### 任务
 
@@ -121,7 +121,7 @@ file:
 ### 建议结构
 
 ```text
-src/main/java/com/yizhaoqi/smartpai/service/chunk/
+src/main/java/com/ivanliu/ragproject/service/chunk/
   ChunkingProperties.java
   DocumentChunker.java
   ChunkCandidate.java

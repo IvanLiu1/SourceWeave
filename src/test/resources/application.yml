@@ -70,7 +70,7 @@ security:
 logging:
   level:
     org.springframework: WARN
-    com.yizhaoqi.smartpai: INFO
+    com.ivanliu.ragproject: INFO
 
 deepseek:
   api:

@@ -15,7 +15,7 @@ WORKDIR /app
 
 RUN groupadd -r paismart && useradd -r -g paismart paismart
 
-COPY --from=build /app/target/SmartPAI-*.jar app.jar
+COPY --from=build /app/target/ragproject-*.jar app.jar
 
 ENV SPRING_PROFILES_ACTIVE=docker \
     JAVA_OPTS="-Xms512m -Xmx1g"
