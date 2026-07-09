@@ -76,8 +76,8 @@ admin:
   bootstrap:
     # 只在第一次初始化管理员时短暂开启
     enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
-    username: ${ADMIN_BOOTSTRAP_USERNAME:}
-    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    username: ${ADMIN_BOOTSTRAP_USERNAME:admin}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:admin12345678}
     primary-org: ${ADMIN_BOOTSTRAP_PRIMARY_ORG:default}
     org-tags: ${ADMIN_BOOTSTRAP_ORG_TAGS:default,admin}
 
@@ -85,8 +85,8 @@ app:
   auth:
     registration:
       # 默认邀请码注册，避免开发环境误开放
-      mode: ${APP_AUTH_REGISTRATION_MODE:INVITE_ONLY}
-      invite-required: ${APP_AUTH_INVITE_REQUIRED:true}
+      mode: ${APP_AUTH_REGISTRATION_MODE:OPEN}
+      invite-required: ${APP_AUTH_INVITE_REQUIRED:false}
 
 rate-limit:
   register:
@@ -121,7 +121,7 @@ elasticsearch:
   port: ${ELASTICSEARCH_PORT:9200}
   scheme: ${ELASTICSEARCH_SCHEME:http}
   username: ${ELASTICSEARCH_USERNAME:elastic}
-  password: ${ELASTICSEARCH_PASSWORD:}
+  password: ${ELASTICSEARCH_PASSWORD:DdgaU6kHtr=KOtvOpGN3}
   insecure-trust-all-certificates: ${ELASTICSEARCH_INSECURE_TRUST_ALL_CERTIFICATES:true}
 
 security:
@@ -140,12 +140,12 @@ deepseek:
   api:
     url: ${DEEPSEEK_API_URL:https://api.deepseek.com/v1}
     model: ${DEEPSEEK_API_MODEL:deepseek-chat}
-    key: ${DEEPSEEK_API_KEY:}
+    key: ${DEEPSEEK_API_KEY:sk-5722f33b5fe2428dbec0a364ad942fc5}
 
 embedding:
   api:
     url: ${EMBEDDING_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
-    key: ${EMBEDDING_API_KEY:}
+    key: ${EMBEDDING_API_KEY:sk-8c354c76a2ff43a3a79c8475d09e7029}
     model: ${EMBEDDING_API_MODEL:text-embedding-v4}
     batch-size: ${EMBEDDING_BATCH_SIZE:10}
     dimension: ${EMBEDDING_DIMENSION:2048}

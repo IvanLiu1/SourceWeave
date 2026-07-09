@@ -3,6 +3,7 @@ package com.yizhaoqi.smartpai.service;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import com.yizhaoqi.smartpai.client.EmbeddingClient;
+import com.yizhaoqi.smartpai.client.RerankClient;
 import com.yizhaoqi.smartpai.entity.EsDocument;
 import com.yizhaoqi.smartpai.entity.SearchResult;
 import com.yizhaoqi.smartpai.model.User;
@@ -13,6 +14,7 @@ import com.yizhaoqi.smartpai.model.FileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
@@ -51,6 +53,12 @@ public class HybridSearchService {
     @Autowired
     private FileUploadRepository fileUploadRepository;
 
+    @Autowired
+    private RerankClient rerankClient;
+
+    @Value("${rerank.candidate-size:50}")
+    private int rerankCandidateSize;
+
     /**
      * 使用文本匹配和向量相似度进行混合搜索，支持权限过滤
      * 该方法确保用户只能搜索其有权限访问的文档（自己的文档、公开文档、所属组织的文档）
@@ -87,6 +95,8 @@ public class HybridSearchService {
                         s.index("knowledge_base");
                         // KNN 召回
                         int recallK = topK * 30; // KNN 召回窗口
+                        // rerank 开启时多召回一批候选，重排后再截取 topK
+                        int fetchSize = rerankClient.isEnabled() ? Math.max(topK, rerankCandidateSize) : topK;
                         s.knn(kn -> kn
                                 .field("vector")
                                 .queryVector(queryVector)
@@ -130,7 +140,7 @@ public class HybridSearchService {
                                         ))
                                 )
                         );
-                        s.size(topK);
+                        s.size(fetchSize);
                         return s;
                     }, EsDocument.class);
 
@@ -160,9 +170,10 @@ public class HybridSearchService {
                     })
                     .toList();
 
-            logger.debug("返回搜索结果数量: {}", results.size());
-            attachFileNames(results);
-            return results;
+            List<SearchResult> reranked = applyRerank(query, results, topK);
+            logger.debug("返回搜索结果数量: {}（候选 {}）", reranked.size(), results.size());
+            attachFileNames(reranked);
+            return reranked;
         } catch (Exception e) {
             logger.error("带权限的搜索失败", e);
             // 发生异常时尝试使用纯文本搜索作为后备方案
@@ -494,5 +505,42 @@ public class HybridSearchService {
         } catch (Exception e) {
             logger.error("补充文件名失败", e);
         }
+    }
+
+    /**
+     * 对召回候选做重排：调用 rerank 模型按相关性重排，取前 topK。
+     * 未启用或重排失败时回退到原始检索顺序（绝不弄坏搜索）。
+     */
+    private List<SearchResult> applyRerank(String query, List<SearchResult> candidates, int topK) {
+        if (candidates == null || candidates.isEmpty()) {
+            return candidates;
+        }
+        if (!rerankClient.isEnabled() || candidates.size() <= 1) {
+            return candidates.size() > topK ? new ArrayList<>(candidates.subList(0, topK)) : candidates;
+        }
+        List<String> docs = candidates.stream().map(SearchResult::getTextContent).toList();
+        List<RerankClient.RerankResult> ranked = rerankClient.rerank(query, docs, topK);
+        if (ranked == null || ranked.isEmpty()) {
+            logger.warn("重排未生效，回退到原始检索顺序");
+            return candidates.size() > topK ? new ArrayList<>(candidates.subList(0, topK)) : candidates;
+        }
+        List<SearchResult> reordered = new ArrayList<>(Math.min(topK, ranked.size()));
+        for (RerankClient.RerankResult r : ranked) {
+            if (r.index() < 0 || r.index() >= candidates.size()) {
+                continue;
+            }
+            SearchResult sr = candidates.get(r.index());
+            sr.setScore(r.score());
+            sr.setRetrievalMode("HYBRID_RERANK");
+            reordered.add(sr);
+            if (reordered.size() >= topK) {
+                break;
+            }
+        }
+        if (reordered.isEmpty()) {
+            return candidates.size() > topK ? new ArrayList<>(candidates.subList(0, topK)) : candidates;
+        }
+        logger.debug("重排完成: 候选 {} -> 返回 {}", candidates.size(), reordered.size());
+        return reordered;
     }
 }

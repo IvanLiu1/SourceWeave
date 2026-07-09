@@ -11,7 +11,8 @@ services:
       MYSQL_ROOT_PASSWORD: PaiSmart2025
     volumes:
       - mysql-data:/var/lib/mysql
-      - /data/docker/mysql/conf:/etc/mysql/conf.d
+      # macOS 本地开发无此路径，仅 Linux 服务器需要
+      # - /data/docker/mysql/conf:/etc/mysql/conf.d
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --explicit_defaults_for_timestamp=true --lower_case_table_names=1
     healthcheck:
       start_period: 5s
@@ -28,7 +29,8 @@ services:
       - "19001:19001"
     volumes:
       - minio-data:/data
-      - /data/docker/minio/config:/root/.minio
+      # macOS 本地开发无此路径，仅 Linux 服务器需要
+      # - /data/docker/minio/config:/root/.minio
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: PaiSmart2025
@@ -42,7 +44,8 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
-      - /data/docker/redis:/logs
+      # macOS 本地开发无此路径，仅 Linux 服务器需要
+      # - /data/docker/redis:/logs
     healthcheck:
       start_period: 5s
       test: ["CMD", "redis-cli", "ping"]
