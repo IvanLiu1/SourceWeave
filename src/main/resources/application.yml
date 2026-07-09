@@ -6,7 +6,7 @@ spring:
   jackson:
     time-zone: ${APP_TIMEZONE:Asia/Shanghai}
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/PaiSmart?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/ragproject?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -137,7 +137,7 @@ file:
 knowledge:
   bootstrap:
     enabled: ${KNOWLEDGE_BOOTSTRAP_ENABLED:true}
-    path: ${KNOWLEDGE_BOOTSTRAP_PATH:docs/paismart.pdf}
+    path: ${KNOWLEDGE_BOOTSTRAP_PATH:docs/ragproject.pdf}
     org-tag: ${KNOWLEDGE_BOOTSTRAP_ORG_TAG:default}
     public: ${KNOWLEDGE_BOOTSTRAP_PUBLIC:true}
     user-id: ${KNOWLEDGE_BOOTSTRAP_USER_ID:system-bootstrap}

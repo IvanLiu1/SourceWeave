@@ -8,7 +8,7 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: PaiSmart2025
+      MYSQL_ROOT_PASSWORD: ragproject2025
     volumes:
       - mysql-data:/var/lib/mysql
       # macOS 本地开发无此路径，仅 Linux 服务器需要
@@ -33,7 +33,7 @@ services:
       # - /data/docker/minio/config:/root/.minio
     environment:
       MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: PaiSmart2025
+      MINIO_ROOT_PASSWORD: ragproject2025
     command: server /data --console-address ":19001" -address ":19000"
 
   redis:
@@ -52,7 +52,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass PaiSmart2025 --appendonly yes
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ragproject2025 --appendonly yes
 
   kafka:
     image: bitnamilegacy/kafka:latest
@@ -124,7 +124,7 @@ services:
     volumes:
       - es-data:/usr/share/elasticsearch/data
     environment:
-      - ELASTIC_PASSWORD=PaiSmart2025
+      - ELASTIC_PASSWORD=ragproject2025
       - node.name=pai-smart-es01
       - discovery.type=single-node
       - xpack.license.self_generated.type=basic

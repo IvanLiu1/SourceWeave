@@ -1,8 +1,8 @@
-# PaiSmart 分块策略优化计划
+# ragproject 分块策略优化计划
 
 ## 背景
 
-当前 PaiSmart 的知识库入库链路是：
+当前 ragproject 的知识库入库链路是：
 
 ```text
 上传完成

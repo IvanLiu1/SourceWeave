@@ -69,12 +69,12 @@ class BootstrapKnowledgeInitializerTest {
 
     @Test
     void shouldSkipWhenBootstrapDocumentAlreadyReady() throws Exception {
-        Path pdfPath = createPdfLikeFile("paismart.pdf", "paismart ready");
+        Path pdfPath = createPdfLikeFile("ragproject.pdf", "ragproject ready");
         String fileMd5 = md5For(pdfPath);
 
         FileUpload existingFile = new FileUpload();
         existingFile.setFileMd5(fileMd5);
-        existingFile.setFileName("paismart.pdf");
+        existingFile.setFileName("ragproject.pdf");
         existingFile.setOrgTag("default");
         existingFile.setPublic(true);
         existingFile.setStatus(1);
@@ -82,7 +82,7 @@ class BootstrapKnowledgeInitializerTest {
 
         configureInitializer(pdfPath);
         mockAdminUser(1L, "admin");
-        when(fileUploadRepository.findByUserIdAndFileNameOrderByCreatedAtDesc("1", "paismart.pdf"))
+        when(fileUploadRepository.findByUserIdAndFileNameOrderByCreatedAtDesc("1", "ragproject.pdf"))
                 .thenReturn(Collections.emptyList());
         when(fileUploadRepository.findFirstByFileMd5AndUserIdOrderByCreatedAtDesc(fileMd5, "1"))
                 .thenReturn(Optional.of(existingFile));
@@ -101,12 +101,12 @@ class BootstrapKnowledgeInitializerTest {
 
     @Test
     void shouldImportWhenBootstrapDocumentMissing() throws Exception {
-        Path pdfPath = createPdfLikeFile("paismart.pdf", "paismart import");
+        Path pdfPath = createPdfLikeFile("ragproject.pdf", "ragproject import");
         String fileMd5 = md5For(pdfPath);
 
         configureInitializer(pdfPath);
         mockAdminUser(1L, "admin");
-        when(fileUploadRepository.findByUserIdAndFileNameOrderByCreatedAtDesc("1", "paismart.pdf"))
+        when(fileUploadRepository.findByUserIdAndFileNameOrderByCreatedAtDesc("1", "ragproject.pdf"))
                 .thenReturn(Collections.emptyList());
         when(fileUploadRepository.findFirstByFileMd5AndUserIdOrderByCreatedAtDesc(fileMd5, "1"))
                 .thenReturn(Optional.empty());
@@ -128,7 +128,7 @@ class BootstrapKnowledgeInitializerTest {
 
         FileUpload savedFile = captor.getValue();
         assertEquals(fileMd5, savedFile.getFileMd5());
-        assertEquals("paismart.pdf", savedFile.getFileName());
+        assertEquals("ragproject.pdf", savedFile.getFileName());
         assertEquals("1", savedFile.getUserId());
         assertEquals("default", savedFile.getOrgTag());
         assertTrue(savedFile.isPublic());
@@ -136,13 +136,13 @@ class BootstrapKnowledgeInitializerTest {
 
     @Test
     void shouldDeleteDuplicateBootstrapRecordsBeforeSkippingImport() throws Exception {
-        Path pdfPath = createPdfLikeFile("paismart.pdf", "paismart duplicate");
+        Path pdfPath = createPdfLikeFile("ragproject.pdf", "ragproject duplicate");
         String fileMd5 = md5For(pdfPath);
 
         FileUpload newest = new FileUpload();
         newest.setId(1L);
         newest.setFileMd5(fileMd5);
-        newest.setFileName("paismart.pdf");
+        newest.setFileName("ragproject.pdf");
         newest.setOrgTag("default");
         newest.setPublic(true);
         newest.setStatus(1);
@@ -151,7 +151,7 @@ class BootstrapKnowledgeInitializerTest {
         FileUpload duplicate = new FileUpload();
         duplicate.setId(2L);
         duplicate.setFileMd5(fileMd5);
-        duplicate.setFileName("paismart.pdf");
+        duplicate.setFileName("ragproject.pdf");
         duplicate.setOrgTag("default");
         duplicate.setPublic(true);
         duplicate.setStatus(1);
@@ -159,7 +159,7 @@ class BootstrapKnowledgeInitializerTest {
 
         configureInitializer(pdfPath);
         mockAdminUser(1L, "admin");
-        when(fileUploadRepository.findByUserIdAndFileNameOrderByCreatedAtDesc("1", "paismart.pdf"))
+        when(fileUploadRepository.findByUserIdAndFileNameOrderByCreatedAtDesc("1", "ragproject.pdf"))
                 .thenReturn(List.of(newest, duplicate));
         when(fileUploadRepository.findFirstByFileMd5AndUserIdOrderByCreatedAtDesc(fileMd5, "1"))
                 .thenReturn(Optional.of(newest));

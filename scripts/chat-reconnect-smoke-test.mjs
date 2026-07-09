@@ -4,7 +4,7 @@ const DEFAULTS = {
   apiBase: 'http://127.0.0.1:8081/api/v1',
   wsBase: 'ws://127.0.0.1:8081/chat',
   username: 'admin',
-  password: 'PaiSmart2026!',
+  password: 'ragproject2026!',
   prompt:
     '请用6个编号小节介绍派聪明的企业知识库与RAG工作流，每节控制在80字左右，最后补3条实施建议。',
   disconnectAfterChunks: 10,

@@ -292,7 +292,7 @@ chmod +x launch.sh
 
 ### 6. 前端部署脚本
 
-`deploy-front.sh` 用于构建前端、打 zip 包、上传到服务器，并在远端替换 `/home/www/PaiSmart-Front/dist`。脚本会自动读取根目录 `.env` 中的部署配置。
+`deploy-front.sh` 用于构建前端、打 zip 包、上传到服务器，并在远端替换 `/home/www/ragproject-Front/dist`。脚本会自动读取根目录 `.env` 中的部署配置。
 
 ```bash
 # 直接构建并部署前端

@@ -13,14 +13,14 @@ RUN mvn -B clean package -DskipTests
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-RUN groupadd -r paismart && useradd -r -g paismart paismart
+RUN groupadd -r ragproject && useradd -r -g ragproject ragproject
 
 COPY --from=build /app/target/ragproject-*.jar app.jar
 
 ENV SPRING_PROFILES_ACTIVE=docker \
     JAVA_OPTS="-Xms512m -Xmx1g"
 
-USER paismart
+USER ragproject
 EXPOSE 8081
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=5 \

@@ -50,7 +50,7 @@ public class BootstrapKnowledgeInitializer implements CommandLineRunner {
     private final MinioClient minioClient;
     private final UserRepository userRepository;
 
-    @Value("${knowledge.bootstrap.path:docs/paismart.pdf}")
+    @Value("${knowledge.bootstrap.path:docs/ragproject.pdf}")
     private String bootstrapDocumentPath;
 
     @Value("${knowledge.bootstrap.org-tag:default}")

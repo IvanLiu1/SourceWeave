@@ -18,7 +18,7 @@ import java.util.Map;
 
 public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
-    private static final String PROPERTY_SOURCE_NAME = "paismartDotenv";
+    private static final String PROPERTY_SOURCE_NAME = "ragprojectDotenv";
     private static final String DOTENV_FILE = ".env";
 
     @Override
