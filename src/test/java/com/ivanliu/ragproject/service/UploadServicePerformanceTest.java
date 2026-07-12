@@ -13,7 +13,14 @@ import org.springframework.test.context.ActiveProfiles;
  * - 优化前：逐个查询Redis，n个分片需要n次网络往返
  * - 优化后：一次性获取所有分片状态，只需要1次网络往返
  */
-@SpringBootTest
+// properties 内联覆盖数据源:本机 .env 会被 DotenvEnvironmentPostProcessor 以高于测试 application.yml 的优先级注入,
+// 不固定 H2 时上下文会拿到 .env 里的 MySQL URL 导致启动失败
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:ragproject;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.datasource.driver-class-name=org.h2.Driver"
+})
 @ActiveProfiles("test")
 public class UploadServicePerformanceTest {
 
