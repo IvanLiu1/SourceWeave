@@ -11,8 +11,7 @@ admin:
 app:
   auth:
     registration:
-      mode: INVITE_ONLY
-      invite-required: true
+      enabled: true
 
 elasticsearch:
   insecure-trust-all-certificates: false
@@ -25,5 +24,5 @@ logging:
     org.springframework.web: INFO
     org.springframework.boot.autoconfigure.web.servlet: INFO
     org.springframework.security: INFO
-    com.yizhaoqi.smartpai: INFO
+    com.ivanliu.ragproject: INFO
     io.minio: WARN

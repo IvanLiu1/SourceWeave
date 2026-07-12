@@ -1,2 +1,2 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-com.yizhaoqi.smartpai.config.DotenvEnvironmentPostProcessor
+com.ivanliu.ragproject.config.DotenvEnvironmentPostProcessor

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PaiSmart (派聪明) is an enterprise-grade AI knowledge management system built with RAG (Retrieval-Augmented Generation) technology. It provides intelligent document processing and retrieval capabilities using a modern tech stack including Spring Boot, Vue 3, Elasticsearch, and AI services.
+ragproject (派聪明) is an enterprise-grade AI knowledge management system built with RAG (Retrieval-Augmented Generation) technology. It provides intelligent document processing and retrieval capabilities using a modern tech stack including Spring Boot, Vue 3, Elasticsearch, and AI services.
 
 ## Development Environment Setup
 
@@ -74,8 +74,8 @@ pnpm preview
 
 ### Backend Structure
 ```
-src/main/java/com/yizhaoqi/smartpai/
-├── SmartPaiApplication.java      # Main application entry
+src/main/java/com/ivanliu/ragproject/
+├── RagProjectApplication.java      # Main application entry
 ├── client/                       # External API clients (DeepSeek, Embedding)
 ├── config/                       # Configuration classes (Security, JWT, etc.)
 ├── consumer/                     # Kafka consumers for async processing

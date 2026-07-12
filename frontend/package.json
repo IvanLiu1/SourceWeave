@@ -2,18 +2,18 @@
   "name": "pi-smart",
   "type": "module",
   "version": "1.3.13",
-  "description": "PaiSmart",
+  "description": "ragproject",
   "author": {
-    "name": "PaiSmart",
-    "url": "https://github.com/itwanger/PaiSmart.git"
+    "name": "ragproject",
+    "url": "https://github.com/IvanLiu1/ragproject.git"
   },
   "license": "MIT",
-  "homepage": "https://github.com/itwanger/PaiSmart.git",
+  "homepage": "https://github.com/IvanLiu1/ragproject.git",
   "repository": {
-    "url": "https://github.com/itwanger/PaiSmart.git"
+    "url": "https://github.com/IvanLiu1/ragproject.git"
   },
   "bugs": {
-    "url": "https://github.com/itwanger/PaiSmart/issues"
+    "url": "https://github.com/IvanLiu1/ragproject/issues"
   },
   "keywords": [
     "ai",
@@ -120,5 +120,5 @@
     "commit-msg": "pnpm sa git-commit-verify",
     "pre-commit": "cd frontend && pnpm typecheck && pnpm lint && git diff --exit-code"
   },
-  "website": "https://github.com/itwanger/PaiSmart.git"
+  "website": "https://github.com/IvanLiu1/ragproject.git"
 }

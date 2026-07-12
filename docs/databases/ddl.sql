@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS `user_token_record` (
                                `record_date` DATE NOT NULL COMMENT '记录日期（按天统计）',
                                `token_type` VARCHAR(20) NOT NULL COMMENT 'Token 类型：LLM/EMBEDDING',
                                `change_type` VARCHAR(20) NOT NULL COMMENT '变动类型：INCREASE/CONSUME',
-                                `request_count` BIGINT NOT NULL DEFAULT 0 COMMENT '请求次数（一次充值或对话可能包含多次 API 请求）'
+                                `request_count` BIGINT NOT NULL DEFAULT 0 COMMENT '请求次数（一次充值或对话可能包含多次 API 请求）',
                                `amount` BIGINT NOT NULL COMMENT '变动数量',
                                `balance_before` BIGINT DEFAULT NULL COMMENT '变动前的余额',
                                `balance_after` BIGINT DEFAULT NULL COMMENT '变动后的余额',

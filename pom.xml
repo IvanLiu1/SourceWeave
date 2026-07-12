@@ -8,11 +8,11 @@
         <version>3.4.2</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.yizhaoqi</groupId>
-    <artifactId>SmartPAI</artifactId>
+    <groupId>com.ivanliu</groupId>
+    <artifactId>ragproject</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>SmartPAI</name>
-    <description>SmartPAI</description>
+    <name>ragproject</name>
+    <description>ragproject</description>
     <url/>
     <licenses>
         <license/>

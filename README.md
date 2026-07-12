@@ -30,8 +30,8 @@ RAG知识库是一个企业级的 AI 知识库管理系统，采用检索增强�
 后端的整体项目结构：
 
 ```bash
-src/main/java/com/yizhaoqi/smartpai/
-├── SmartPaiApplication.java      # 主应用程序入口
+src/main/java/com/ivanliu/ragproject/
+├── RagProjectApplication.java      # 主应用程序入口
 ├── client/                       # 外部API客户端
 ├── config/                       # 配置类
 ├── consumer/                     # Kafka消费者
@@ -196,7 +196,7 @@ public class FileUpload {
 cp .env.example .env
 ```
 
-后端启动时会通过 `DotenvEnvironmentPostProcessor` 自动读取项目根目录 `.env`，所以无论是 IDE 直接运行 `SmartPaiApplication`，还是在项目根目录执行 `mvn spring-boot:run`，都会优先使用这里的配置。
+后端启动时会通过 `DotenvEnvironmentPostProcessor` 自动读取项目根目录 `.env`，所以无论是 IDE 直接运行 `RagProjectApplication`，还是在项目根目录执行 `mvn spring-boot:run`，都会优先使用这里的配置。
 
 `.env` 里当前主要有三类配置：
 
@@ -257,7 +257,7 @@ cp .env.example .env
 mvn spring-boot:run
 ```
 
-也可以直接在 IDE 中运行 `src/main/java/com/yizhaoqi/smartpai/SmartPaiApplication.java`，效果一样，都会自动读取根目录 `.env`。
+也可以直接在 IDE 中运行 `src/main/java/com/ivanliu/ragproject/RagProjectApplication.java`，效果一样，都会自动读取根目录 `.env`。
 
 ### 4. 启动前端
 
@@ -292,7 +292,7 @@ chmod +x launch.sh
 
 ### 6. 前端部署脚本
 
-`deploy-front.sh` 用于构建前端、打 zip 包、上传到服务器，并在远端替换 `/home/www/PaiSmart-Front/dist`。脚本会自动读取根目录 `.env` 中的部署配置。
+`deploy-front.sh` 用于构建前端、打 zip 包、上传到服务器，并在远端替换 `/home/www/ragproject-Front/dist`。脚本会自动读取根目录 `.env` 中的部署配置。
 
 ```bash
 # 直接构建并部署前端

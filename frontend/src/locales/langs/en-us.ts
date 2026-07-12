@@ -164,7 +164,6 @@ const local: App.I18n.Schema = {
     'iframe-page': 'Iframe',
     chat: 'Chat Assistant',
     'chat-history': 'Chat History',
-    'invite-code': 'Invite Codes',
     'knowledge-base': 'Knowledge Base',
     'model-provider': 'Model Providers',
     'org-tag': 'Organization Tag',
@@ -183,7 +182,6 @@ const local: App.I18n.Schema = {
         codePlaceholder: 'Please enter verification code',
         passwordPlaceholder: 'Please enter password',
         confirmPasswordPlaceholder: 'Please enter password again',
-        inviteCodePlaceholder: 'Please enter invite code',
         codeLogin: 'Verification code login',
         confirm: 'Confirm',
         back: 'Back',
@@ -215,7 +213,6 @@ const local: App.I18n.Schema = {
         protocol: '《User Agreement》',
         and: 'and',
         policy: '《Privacy Policy》',
-        inviteCodeTip: 'This site is invite-only. If you do not have an invite code yet, please contact the administrator.'
       },
       resetPwd: {
         title: 'Reset Password'

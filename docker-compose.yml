@@ -1,19 +1,19 @@
-# PaiSmart 全栈部署编排（基础设施 + 后端 + 前端）
+# ragproject 全栈部署编排（基础设施 + 后端 + 前端）
 # 使用方式：cp .env.docker.example .env && 填写密钥 && docker compose up -d --build
 # 仅启动基础设施做本地开发请用 docs/docker-compose.yaml
-name: pai_smart
+name: rag
 
 services:
   mysql:
     image: mysql:8
-    container_name: paismart-mysql
+    container_name: ragproject-mysql
     restart: always
     # 生产环境不建议把数据库端口暴露到公网，调试需要时再打开
     # ports:
     #   - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: PaiSmart
+      MYSQL_DATABASE: ragproject
     volumes:
       - mysql-data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --explicit_defaults_for_timestamp=true --lower_case_table_names=1
@@ -26,7 +26,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: paismart-redis
+    container_name: ragproject-redis
     restart: always
     # ports:
     #   - "127.0.0.1:6379:6379"
@@ -44,7 +44,7 @@ services:
 
   kafka:
     image: bitnamilegacy/kafka:latest
-    container_name: paismart-kafka
+    container_name: ragproject-kafka
     restart: always
     # EXTERNAL 监听器供宿主机调试使用（localhost:9094），容器间走 kafka:9092
     # ports:
@@ -68,7 +68,7 @@ services:
 
   es:
     image: elasticsearch:8.10.4
-    container_name: paismart-es
+    container_name: ragproject-es
     restart: always
     # ports:
     #   - "127.0.0.1:9200:9200"
@@ -108,7 +108,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    container_name: paismart-minio
+    container_name: ragproject-minio
     restart: always
     # 19000 需要对浏览器可达（文件预览/下载走 MINIO_PUBLIC_URL）
     ports:
@@ -130,8 +130,8 @@ services:
 
   backend:
     build: .
-    image: paismart-backend
-    container_name: paismart-backend
+    image: ragproject-backend
+    container_name: ragproject-backend
     restart: always
     # 前端容器通过内部网络访问，无需暴露；若宿主机 nginx 需要直连再打开
     ports:
@@ -141,7 +141,7 @@ services:
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx1g}
 
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/PaiSmart?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ragproject?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
 
@@ -178,8 +178,7 @@ services:
       ADMIN_BOOTSTRAP_PRIMARY_ORG: ${ADMIN_BOOTSTRAP_PRIMARY_ORG:-default}
       ADMIN_BOOTSTRAP_ORG_TAGS: ${ADMIN_BOOTSTRAP_ORG_TAGS:-default,admin}
 
-      APP_AUTH_REGISTRATION_MODE: ${APP_AUTH_REGISTRATION_MODE:-INVITE_ONLY}
-      APP_AUTH_INVITE_REQUIRED: ${APP_AUTH_INVITE_REQUIRED:-true}
+      APP_AUTH_REGISTRATION_ENABLED: ${APP_AUTH_REGISTRATION_ENABLED:-true}
 
       SECURITY_ALLOWED_ORIGINS: ${SECURITY_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
 
@@ -211,8 +210,8 @@ services:
 
   frontend:
     build: ./frontend
-    image: paismart-frontend
-    container_name: paismart-frontend
+    image: ragproject-frontend
+    container_name: ragproject-frontend
     restart: always
     ports:
       - "${FRONTEND_PORT:-8080}:80"

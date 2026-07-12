@@ -6,7 +6,7 @@ spring:
   jackson:
     time-zone: ${APP_TIMEZONE:Asia/Shanghai}
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/PaiSmart?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/ragproject?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -79,19 +79,15 @@ admin:
   bootstrap:
     # 仅用于首次引导创建管理员账号，创建成功后应关闭
     enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
-    username: ${ADMIN_BOOTSTRAP_USERNAME:}
-    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    username: ${ADMIN_BOOTSTRAP_USERNAME:admin}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:admin12345678}
     primary-org: ${ADMIN_BOOTSTRAP_PRIMARY_ORG:default}
     org-tags: ${ADMIN_BOOTSTRAP_ORG_TAGS:default,admin}
 
 app:
   auth:
     registration:
-      # OPEN: 开放注册
-      # INVITE_ONLY: 必须邀请码
-      # CLOSED: 完全关闭注册
-      mode: ${APP_AUTH_REGISTRATION_MODE:INVITE_ONLY}
-      invite-required: ${APP_AUTH_INVITE_REQUIRED:true}
+      enabled: ${APP_AUTH_REGISTRATION_ENABLED:true}
 
 rate-limit:
   # Redis 限流，用于保护登录、注册、聊天、LLM 和向量接口
@@ -141,7 +137,7 @@ file:
 knowledge:
   bootstrap:
     enabled: ${KNOWLEDGE_BOOTSTRAP_ENABLED:true}
-    path: ${KNOWLEDGE_BOOTSTRAP_PATH:docs/paismart.pdf}
+    path: ${KNOWLEDGE_BOOTSTRAP_PATH:docs/ragproject.pdf}
     org-tag: ${KNOWLEDGE_BOOTSTRAP_ORG_TAG:default}
     public: ${KNOWLEDGE_BOOTSTRAP_PUBLIC:true}
     user-id: ${KNOWLEDGE_BOOTSTRAP_USER_ID:system-bootstrap}
@@ -153,7 +149,7 @@ elasticsearch:
   port: ${ELASTICSEARCH_PORT:9200}
   scheme: ${ELASTICSEARCH_SCHEME:https}
   username: ${ELASTICSEARCH_USERNAME:elastic}
-  password: ${ELASTICSEARCH_PASSWORD:}
+  password: ${ELASTICSEARCH_PASSWORD:DdgaU6kHtr=KOtvOpGN3}
   insecure-trust-all-certificates: ${ELASTICSEARCH_INSECURE_TRUST_ALL_CERTIFICATES:true}
   init:
     enabled: ${ELASTICSEARCH_INIT_ENABLE:true}
@@ -167,7 +163,7 @@ logging:
     org.springframework.web: ${LOG_LEVEL_WEB:DEBUG}
     org.springframework.boot.autoconfigure.web.servlet: ${LOG_LEVEL_AUTOCONFIG:DEBUG}
     org.springframework.security: ${LOG_LEVEL_SECURITY:DEBUG}
-    com.yizhaoqi.smartpai: ${LOG_LEVEL_APP:DEBUG}
+    com.ivanliu.ragproject: ${LOG_LEVEL_APP:DEBUG}
     io.minio: ${LOG_LEVEL_MINIO:DEBUG}
 
 log4j:
@@ -187,15 +183,27 @@ embedding:
   api:
     # 向量服务配置
     url: ${EMBEDDING_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
-    key: ${EMBEDDING_API_KEY:}
+    key: ${EMBEDDING_API_KEY:sk-8c354c76a2ff43a3a79c8475d09e7029}
     model: ${EMBEDDING_API_MODEL:text-embedding-v4}
     batch-size: ${EMBEDDING_BATCH_SIZE:10}
     dimension: ${EMBEDDING_DIMENSION:2048}
 
+rerank:
+  # 检索重排：召回后用 rerank 模型对候选按相关性重排、取 topK（提升召回质量）
+  enabled: ${RERANK_ENABLED:true}
+  # 送入重排的候选数量（ES 召回这么多，重排后截取 topK）
+  candidate-size: ${RERANK_CANDIDATE_SIZE:50}
+  timeout-seconds: ${RERANK_TIMEOUT_SECONDS:10}
+  api:
+    url: ${RERANK_API_URL:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+    # 复用 DashScope 的 key（与 embedding 同源，未单独配置时回退到 EMBEDDING_API_KEY）
+    key: ${RERANK_API_KEY:${EMBEDDING_API_KEY:}}
+    model: ${RERANK_API_MODEL:gte-rerank-v2}
+
 ai:
   prompt:
     rules: |
-      你是派聪明知识助手，须遵守：
+      你是 RAG 知识库助手，须遵守：
       1. 仅用简体中文作答。
       2. 回答需先给结论，再给论据。
       3. 如引用参考信息，请在句末加 (来源#编号: 文件名)。如有页码信息请标注页码，格式：(来源#编号: 文件名 | 第X页)。

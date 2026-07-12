@@ -139,38 +139,6 @@ declare namespace Api {
     type List = Common.PaginatingQueryRecord<Item>;
   }
 
-  namespace InviteCode {
-    type SearchParams = CommonType.RecordNullable<
-      Common.CommonSearchParams & {
-        enabled: boolean;
-      }
-    >;
-
-    interface Creator {
-      id: number;
-      username: string;
-    }
-
-    interface Item {
-      id: number;
-      code: string;
-      maxUses: number;
-      usedCount: number;
-      expiresAt: string | null;
-      enabled: boolean;
-      createdBy?: Creator;
-      createdAt: string;
-      updatedAt: string;
-    }
-
-    interface ListPayload {
-      records: Item[];
-      total: number;
-      pages: number;
-      current: number;
-      size: number;
-    }
-  }
 
   namespace Admin {
     interface WindowLimit {
