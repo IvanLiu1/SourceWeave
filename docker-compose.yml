@@ -1,7 +1,7 @@
 # ragproject 全栈部署编排（基础设施 + 后端 + 前端）
 # 使用方式：cp .env.docker.example .env && 填写密钥 && docker compose up -d --build
 # 仅启动基础设施做本地开发请用 docs/docker-compose.yaml
-name: pai_smart
+name: rag
 
 services:
   mysql:

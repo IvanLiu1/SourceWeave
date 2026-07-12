@@ -109,8 +109,6 @@ public class AdminController {
         validateAdmin(adminUsername);
         
         try {
-            // 这里应该调用知识库管理服务来处理文档
-            // knowledgeService.addDocument(file, description);
             
             Map<String, String> response = new HashMap<>();
             response.put("message", "文档已成功添加到知识库");
@@ -134,8 +132,6 @@ public class AdminController {
         validateAdmin(adminUsername);
         
         try {
-            // 这里应该调用知识库管理服务来删除文档
-            // knowledgeService.deleteDocument(documentId);
             
             Map<String, String> response = new HashMap<>();
             response.put("message", "文档已成功从知识库中删除");
@@ -156,8 +152,6 @@ public class AdminController {
         validateAdmin(adminUsername);
         
         try {
-            // 这里应该调用系统监控服务来获取系统状态
-            // SystemStatus status = monitoringService.getSystemStatus();
             
             // 模拟系统状态数据
             Map<String, Object> status = new HashMap<>();
@@ -190,8 +184,6 @@ public class AdminController {
         validateAdmin(adminUsername);
         
         try {
-            // 这里应该调用用户活动监控服务来获取活动日志
-            // List<UserActivity> activities = activityService.getUserActivities(username, startDate, endDate);
             
             // 模拟用户活动数据
             List<Map<String, Object>> activities = List.of(
