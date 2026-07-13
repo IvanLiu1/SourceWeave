@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import com.ivanliu.ragproject.config.KafkaConfig;
 import com.ivanliu.ragproject.model.FileProcessingTask;
 import com.ivanliu.ragproject.model.FileUpload;
@@ -47,6 +48,9 @@ public class DocumentService {
     private record InMemoryPdfPreviewCache(byte[] content, long expiresAtMillis) {}
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentService.class);
+
+    @Value("${minio.bucketName:uploads}")
+    private String minioBucket = "uploads";
     private static final String PDF_SINGLE_PAGE_CACHE_PREFIX = "preview:pdf:single-page:";
     private static final long PDF_SINGLE_PAGE_CACHE_TTL_MINUTES = 30;
     private static final long PDF_SINGLE_PAGE_CACHE_TTL_MILLIS = TimeUnit.MINUTES.toMillis(PDF_SINGLE_PAGE_CACHE_TTL_MINUTES);
@@ -123,7 +127,7 @@ public class DocumentService {
                 String objectName = "merged/" + fileUpload.getFileMd5();
                 minioClient.removeObject(
                         RemoveObjectArgs.builder()
-                                .bucket("uploads")
+                                .bucket(minioBucket)
                                 .object(objectName)
                                 .build()
                 );
@@ -135,7 +139,7 @@ public class DocumentService {
                     String oldObjectName = "merged/" + fileUpload.getFileName();
                     minioClient.removeObject(
                             RemoveObjectArgs.builder()
-                                    .bucket("uploads")
+                                    .bucket(minioBucket)
                                     .object(oldObjectName)
                                     .build()
                     );
@@ -482,7 +486,7 @@ public class DocumentService {
                 String presignedUrl = minioClient.getPresignedObjectUrl(
                         GetPresignedObjectUrlArgs.builder()
                                 .method(Method.GET)
-                                .bucket("uploads")
+                                .bucket(minioBucket)
                                 .object(objectName)
                                 .expiry(3600)
                                 .build()
@@ -500,7 +504,7 @@ public class DocumentService {
                 String presignedUrl = minioClient.getPresignedObjectUrl(
                         GetPresignedObjectUrlArgs.builder()
                                 .method(Method.GET)
-                                .bucket("uploads")
+                                .bucket(minioBucket)
                                 .object(oldObjectName)
                                 .expiry(3600)
                                 .build()
@@ -648,7 +652,7 @@ public class DocumentService {
         try {
             InputStream inputStream = minioClient.getObject(
                     GetObjectArgs.builder()
-                            .bucket("uploads")
+                            .bucket(minioBucket)
                             .object(objectName)
                             .build());
             logger.info("使用新路径（MD5）获取文件流: fileMd5={}, objectName={}", fileUpload.getFileMd5(), objectName);
@@ -659,7 +663,7 @@ public class DocumentService {
             String oldObjectName = "merged/" + fileUpload.getFileName();
             InputStream inputStream = minioClient.getObject(
                     GetObjectArgs.builder()
-                            .bucket("uploads")
+                            .bucket(minioBucket)
                             .object(oldObjectName)
                             .build());
             logger.info("使用旧路径（文件名）获取文件流: fileMd5={}, objectName={}", fileUpload.getFileMd5(), oldObjectName);

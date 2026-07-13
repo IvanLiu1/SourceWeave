@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.service;
 
+import com.ivanliu.ragproject.common.RedisKeys;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -501,7 +502,7 @@ public class ChatHandler {
         }
         chatGenerationStateService.markCompleted(generationId, toSerializableReferenceMappings(referenceMappings));
         sendCompletionNotification(userId, generationId, conversationId, false, !persisted);
-        logger.info("对话存储信息 - Redis键: {}, 值: {}", "user:" + userId + ":current_conversation", conversationId);
+        logger.info("对话存储信息 - Redis键: {}, 值: {}", RedisKeys.currentConversation(userId), conversationId);
         cleanupGenerationState(generationId, null);
         logger.info("消息处理完成，用户ID: {}", userId);
     }
@@ -556,7 +557,7 @@ public class ChatHandler {
     }
 
     private String getOrCreateConversationId(String userId) {
-        String key = "user:" + userId + ":current_conversation";
+        String key = RedisKeys.currentConversation(userId);
         String conversationId = redisTemplate.opsForValue().get(key);
         
         if (conversationId == null) {
@@ -591,7 +592,7 @@ public class ChatHandler {
             return "";
         }
         try {
-            Map<Object, Object> feedbackEntries = redisTemplate.opsForHash().entries("feedback:" + userId);
+            Map<Object, Object> feedbackEntries = redisTemplate.opsForHash().entries(RedisKeys.feedback(userId));
             if (feedbackEntries == null || feedbackEntries.isEmpty()) {
                 return "";
             }
@@ -627,7 +628,7 @@ public class ChatHandler {
     }
 
     private List<Map<String, Object>> getConversationHistoryRecords(String conversationId) {
-        String key = "conversation:" + conversationId;
+        String key = RedisKeys.conversation(conversationId);
         String json = redisTemplate.opsForValue().get(key);
         try {
             if (json == null) {
@@ -646,7 +647,7 @@ public class ChatHandler {
 
     private void updateConversationHistory(String conversationId, String userMessage, String response,
                                            Map<Integer, ReferenceInfo> referenceMapping) {
-        String key = "conversation:" + conversationId;
+        String key = RedisKeys.conversation(conversationId);
         List<Map<String, Object>> history = getConversationHistoryRecords(conversationId);
         
         // 获取当前时间戳

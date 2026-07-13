@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import com.ivanliu.ragproject.config.MinioConfig;
 import com.ivanliu.ragproject.exception.CustomException;
 import com.ivanliu.ragproject.model.ChunkInfo;
@@ -34,6 +35,10 @@ import java.util.stream.Collectors;
 public class UploadService {
 
     private static final Logger logger = LoggerFactory.getLogger(UploadService.class);
+
+    // 桶名走配置(与 BootstrapKnowledgeInitializer 同一属性);字段初始化器保证纯 Mockito 测试下仍为默认值
+    @Value("${minio.bucketName:uploads}")
+    private String minioBucket = "uploads";
 
     // 用于缓存已上传分片的信息
     @Autowired
@@ -117,7 +122,7 @@ public class UploadService {
                           fileMd5, fileName, fileType, chunkIndex, storagePath, file.getSize(), contentType);
 
                 PutObjectArgs putObjectArgs = PutObjectArgs.builder()
-                        .bucket("uploads")
+                        .bucket(minioBucket)
                         .object(storagePath)
                         .stream(file.getInputStream(), file.getSize(), -1)
                         .contentType(file.getContentType())
@@ -539,7 +544,7 @@ public class UploadService {
                 try {
                     StatObjectResponse stat = minioClient.statObject(
                         StatObjectArgs.builder()
-                            .bucket("uploads")
+                            .bucket(minioBucket)
                             .object(path)
                             .build()
                     );
@@ -559,7 +564,7 @@ public class UploadService {
             try {
                 // 合并分片
                 List<ComposeSource> sources = partPaths.stream()
-                        .map(path -> ComposeSource.builder().bucket("uploads").object(path).build())
+                        .map(path -> ComposeSource.builder().bucket(minioBucket).object(path).build())
                         .collect(Collectors.toList());
                 
                 logger.debug("构建合并请求 => fileMd5: {}, fileName: {}, targetPath: {}, sourcePaths: {}", 
@@ -567,7 +572,7 @@ public class UploadService {
                 
                 minioClient.composeObject(
                         ComposeObjectArgs.builder()
-                                .bucket("uploads")
+                                .bucket(minioBucket)
                                 .object(mergedPath)
                                 .sources(sources)
                                 .build()
@@ -577,7 +582,7 @@ public class UploadService {
                 // 检查合并后的文件
                 StatObjectResponse stat = minioClient.statObject(
                     StatObjectArgs.builder()
-                        .bucket("uploads")
+                        .bucket(minioBucket)
                         .object(mergedPath)
                         .build()
                 );
@@ -589,7 +594,7 @@ public class UploadService {
                     try {
                         minioClient.removeObject(
                                 RemoveObjectArgs.builder()
-                                        .bucket("uploads")
+                                        .bucket(minioBucket)
                                         .object(path)
                                         .build()
                         );
@@ -639,7 +644,7 @@ public class UploadService {
     public GetObjectResponse getMergedFileStream(String fileMd5) throws Exception {
         return minioClient.getObject(
                 GetObjectArgs.builder()
-                        .bucket("uploads")
+                        .bucket(minioBucket)
                         .object("merged/" + fileMd5)
                         .build()
         );
@@ -649,7 +654,7 @@ public class UploadService {
         return minioClient.getPresignedObjectUrl(
                 GetPresignedObjectUrlArgs.builder()
                         .method(Method.GET)
-                        .bucket("uploads")
+                        .bucket(minioBucket)
                         .object("merged/" + fileMd5)
                         .expiry(1, TimeUnit.HOURS)
                         .build()

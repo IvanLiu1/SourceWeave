@@ -1,5 +1,7 @@
 package com.ivanliu.ragproject.service;
 
+import com.ivanliu.ragproject.common.RedisKeys;
+import com.ivanliu.ragproject.common.EsIndices;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.DocStats;
 import co.elastic.clients.elasticsearch._types.StoreStats;
@@ -24,7 +26,7 @@ import java.util.function.Consumer;
 @Service
 public class AgentToolRegistry {
 
-    private static final String KNOWLEDGE_INDEX = "knowledge_base";
+    private static final String KNOWLEDGE_INDEX = EsIndices.KNOWLEDGE_BASE;
     private static final int DEFAULT_TOP_K = 5;
     private static final int MAX_SEARCH_DOCS = 20;
 
@@ -130,7 +132,7 @@ public class AgentToolRegistry {
             throw new IllegalArgumentException("rating 只允许 good 或 bad");
         }
         String reason = getOptionalString(arguments, "reason");
-        String key = "feedback:" + userId;
+        String key = RedisKeys.feedback(userId);
         String field = String.valueOf(System.currentTimeMillis());
         String value = reason == null || reason.isBlank()
                 ? "rating=" + rating

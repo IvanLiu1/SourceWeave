@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.config;
 
+import com.ivanliu.ragproject.common.EsIndices;
 import co.elastic.clients.transport.endpoints.BooleanResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,7 +82,7 @@ public class EsIndexInitializer implements CommandLineRunner {
      */
     private void initializeIndex() throws Exception {
         // 检查索引是否存在
-        BooleanResponse existsResponse = esClient.indices().exists(ExistsRequest.of(e -> e.index("knowledge_base")));
+        BooleanResponse existsResponse = esClient.indices().exists(ExistsRequest.of(e -> e.index(EsIndices.KNOWLEDGE_BASE)));
         if (!existsResponse.value()) {
             createIndex();
         } else {
@@ -101,7 +102,7 @@ public class EsIndexInitializer implements CommandLineRunner {
         }
         // 创建索引并应用映射
         CreateIndexRequest createIndexRequest = CreateIndexRequest.of(c -> c
-                .index("knowledge_base") // 索引名称
+                .index(EsIndices.KNOWLEDGE_BASE) // 索引名称
                 .withJson(new StringReader(mappingJson)) // 使用 JSON 文件定义映射
         );
         esClient.indices().create(createIndexRequest);

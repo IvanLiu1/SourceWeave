@@ -1,5 +1,7 @@
 package com.ivanliu.ragproject.utils;
 
+import org.springframework.beans.factory.annotation.Value;
+import com.ivanliu.ragproject.common.EsIndices;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.DeleteByQueryRequest;
@@ -32,6 +34,9 @@ import java.util.List;
 public class MinioMigrationUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(MinioMigrationUtil.class);
+
+    @Value("${minio.bucketName:uploads}")
+    private String minioBucket = "uploads";
 
     @Autowired
     private MinioClient minioClient;
@@ -98,7 +103,7 @@ public class MinioMigrationUtil {
                 logger.warn("  新路径已存在，删除旧路径: {}", newPath);
                 minioClient.removeObject(
                     RemoveObjectArgs.builder()
-                        .bucket("uploads")
+                        .bucket(minioBucket)
                         .object(oldPath)
                         .build()
                 );
@@ -110,11 +115,11 @@ public class MinioMigrationUtil {
             logger.debug("  复制: {} -> {}", oldPath, newPath);
             minioClient.copyObject(
                 CopyObjectArgs.builder()
-                    .bucket("uploads")
+                    .bucket(minioBucket)
                     .object(newPath)
                     .source(
                         CopySource.builder()
-                            .bucket("uploads")
+                            .bucket(minioBucket)
                             .object(oldPath)
                             .build()
                     )
@@ -125,7 +130,7 @@ public class MinioMigrationUtil {
             logger.debug("  删除旧路径: {}", oldPath);
             minioClient.removeObject(
                 RemoveObjectArgs.builder()
-                    .bucket("uploads")
+                    .bucket(minioBucket)
                     .object(oldPath)
                     .build()
             );
@@ -147,7 +152,7 @@ public class MinioMigrationUtil {
         try {
             minioClient.statObject(
                 StatObjectArgs.builder()
-                    .bucket("uploads")
+                    .bucket(minioBucket)
                     .object(objectPath)
                     .build()
             );
@@ -169,7 +174,7 @@ public class MinioMigrationUtil {
             // 1. 清空 ElasticSearch
             logger.info("清空 ElasticSearch 索引...");
             DeleteByQueryRequest deleteRequest = DeleteByQueryRequest.of(d -> d
-                .index("knowledge_base")
+                .index(EsIndices.KNOWLEDGE_BASE)
                 .query(Query.of(q -> q.matchAll(m -> m)))
             );
             esClient.deleteByQuery(deleteRequest);
@@ -187,7 +192,7 @@ public class MinioMigrationUtil {
                 try {
                     minioClient.removeObject(
                         RemoveObjectArgs.builder()
-                            .bucket("uploads")
+                            .bucket(minioBucket)
                             .object("merged/" + file.getFileMd5())
                             .build()
                     );
@@ -197,7 +202,7 @@ public class MinioMigrationUtil {
                 try {
                     minioClient.removeObject(
                         RemoveObjectArgs.builder()
-                            .bucket("uploads")
+                            .bucket(minioBucket)
                             .object("merged/" + file.getFileName())
                             .build()
                     );

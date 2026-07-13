@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.service;
 
+import com.ivanliu.ragproject.common.EsIndices;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import com.ivanliu.ragproject.client.EmbeddingClient;
@@ -92,7 +93,7 @@ public class HybridSearchService {
             logger.debug("向量生成成功，开始执行混合搜索 KNN");
 
             SearchResponse<EsDocument> response = esClient.search(s -> {
-                        s.index("knowledge_base");
+                        s.index(EsIndices.KNOWLEDGE_BASE);
                         // KNN 召回
                         int recallK = topK * 30; // KNN 召回窗口
                         // rerank 开启时多召回一批候选，重排后再截取 topK
@@ -195,7 +196,7 @@ public class HybridSearchService {
             logger.debug("开始执行纯文本搜索，用户数据库ID: {}, 标签: {}", userDbId, userEffectiveTags);
 
             SearchResponse<EsDocument> response = esClient.search(s -> s
-                    .index("knowledge_base")
+                    .index(EsIndices.KNOWLEDGE_BASE)
                     .query(q -> q
                             .bool(b -> b
                                     // 匹配内容相关性
@@ -307,7 +308,7 @@ public class HybridSearchService {
             }
 
             SearchResponse<EsDocument> response = esClient.search(s -> {
-                        s.index("knowledge_base");
+                        s.index(EsIndices.KNOWLEDGE_BASE);
                         int recallK = topK * 30;
                         s.knn(kn -> kn
                                 .field("vector")
@@ -373,7 +374,7 @@ public class HybridSearchService {
      */
     private List<SearchResult> textOnlySearch(String query, int topK) throws Exception {
         SearchResponse<EsDocument> response = esClient.search(s -> s
-                .index("knowledge_base")
+                .index(EsIndices.KNOWLEDGE_BASE)
                 .query(q -> q
                         .match(m -> m
                                 .field("textContent")

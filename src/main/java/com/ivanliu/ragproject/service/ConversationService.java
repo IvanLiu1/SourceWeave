@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.service;
 
+import com.ivanliu.ragproject.common.RedisKeys;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivanliu.ragproject.exception.CustomException;
@@ -113,7 +114,7 @@ public class ConversationService {
         sessionRepository.save(session);
 
         // Update Redis so the backend uses this new conversation for subsequent messages
-        String redisKey = "user:" + userId + ":current_conversation";
+        String redisKey = RedisKeys.currentConversation(userId);
         redisTemplate.opsForValue().set(redisKey, conversationId, Duration.ofDays(7));
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -145,7 +146,7 @@ public class ConversationService {
         if (!sessionRepository.existsByConversationId(conversationId)) {
             throw new CustomException("对话不存在", HttpStatus.NOT_FOUND);
         }
-        String redisKey = "user:" + userId + ":current_conversation";
+        String redisKey = RedisKeys.currentConversation(userId);
         redisTemplate.opsForValue().set(redisKey, conversationId, Duration.ofDays(7));
     }
 
