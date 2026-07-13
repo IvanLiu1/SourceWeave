@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.repository;
 
+import com.ivanliu.ragproject.common.RedisKeys;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivanliu.ragproject.entity.Message;
@@ -22,11 +23,11 @@ public class RedisRepository {
     }
 
     public String getCurrentConversationId(String userId) {
-        return (String) redisTemplate.opsForValue().get("user:" + userId + ":current_conversation");
+        return (String) redisTemplate.opsForValue().get(RedisKeys.currentConversation(userId));
     }
 
     public List<Message> getConversationHistory(String conversationId) {
-        String json = (String) redisTemplate.opsForValue().get("conversation:" + conversationId);
+        String json = (String) redisTemplate.opsForValue().get(RedisKeys.conversation(conversationId));
         try {
             return json == null ? new ArrayList<>() : objectMapper.readValue(json, objectMapper.getTypeFactory().constructCollectionType(List.class, Message.class));
         } catch (JsonProcessingException e) {
@@ -35,6 +36,6 @@ public class RedisRepository {
     }
 
     public void saveConversationHistory(String conversationId, List<Message> messages) throws JsonProcessingException {
-        redisTemplate.opsForValue().set("conversation:" + conversationId, objectMapper.writeValueAsString(messages), Duration.ofDays(7));
+        redisTemplate.opsForValue().set(RedisKeys.conversation(conversationId), objectMapper.writeValueAsString(messages), Duration.ofDays(7));
     }
 }

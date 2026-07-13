@@ -1,5 +1,6 @@
 package com.ivanliu.ragproject.service;
 
+import com.ivanliu.ragproject.common.EsIndices;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
@@ -38,7 +39,7 @@ public class ElasticsearchService {
             // 将文档列表转换为批量操作列表，每个文档都对应一个索引操作
             List<BulkOperation> bulkOperations = documents.stream()
                     .map(doc -> BulkOperation.of(op -> op.index(idx -> idx
-                            .index("knowledge_base") // 指定索引名称
+                            .index(EsIndices.KNOWLEDGE_BASE) // 指定索引名称
                             .id(doc.getId()) // 使用文档的ID作为Elasticsearch中的文档ID
                             .document(doc) // 将文档对象作为数据源
                     )))
@@ -76,7 +77,7 @@ public class ElasticsearchService {
     public void deleteByFileMd5(String fileMd5) {
         try {
             DeleteByQueryRequest request = DeleteByQueryRequest.of(d -> d
-                    .index("knowledge_base")
+                    .index(EsIndices.KNOWLEDGE_BASE)
                     .query(q -> q.term(t -> t.field("fileMd5").value(fileMd5)))
             );
             esClient.deleteByQuery(request);
@@ -88,7 +89,7 @@ public class ElasticsearchService {
     public long countByFileMd5(String fileMd5) {
         try {
             CountResponse response = esClient.count(c -> c
-                    .index("knowledge_base")
+                    .index(EsIndices.KNOWLEDGE_BASE)
                     .query(q -> q.term(t -> t.field("fileMd5").value(fileMd5)))
             );
             return response.count();
