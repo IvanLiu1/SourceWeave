@@ -114,7 +114,7 @@ public class ConversationService {
         sessionRepository.save(session);
 
         // Update Redis so the backend uses this new conversation for subsequent messages
-        String redisKey = RedisKeys.currentConversation(userId);
+        String redisKey = RedisKeys.currentConversation(String.valueOf(userId));
         redisTemplate.opsForValue().set(redisKey, conversationId, Duration.ofDays(7));
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -146,7 +146,7 @@ public class ConversationService {
         if (!sessionRepository.existsByConversationId(conversationId)) {
             throw new CustomException("对话不存在", HttpStatus.NOT_FOUND);
         }
-        String redisKey = RedisKeys.currentConversation(userId);
+        String redisKey = RedisKeys.currentConversation(String.valueOf(userId));
         redisTemplate.opsForValue().set(redisKey, conversationId, Duration.ofDays(7));
     }
 
