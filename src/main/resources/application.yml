@@ -188,6 +188,12 @@ embedding:
     batch-size: ${EMBEDDING_BATCH_SIZE:10}
     dimension: ${EMBEDDING_DIMENSION:2048}
 
+agent:
+  search:
+    # search_knowledge 检索质量信号：rerank 校准分（0~1）低于该阈值时，
+    # 在 tool 结果中显式提示模型"结果可能不相关，建议改写 query 重试"
+    low-score-warn-threshold: ${AGENT_SEARCH_LOW_SCORE_THRESHOLD:0.4}
+
 rerank:
   # 检索重排：召回后用 rerank 模型对候选按相关性重排、取 topK（提升召回质量）
   enabled: ${RERANK_ENABLED:true}

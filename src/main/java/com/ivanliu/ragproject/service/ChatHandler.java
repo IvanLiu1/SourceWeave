@@ -42,7 +42,6 @@ import java.util.function.Consumer;
 public class ChatHandler {
     
     private static final Logger logger = LoggerFactory.getLogger(ChatHandler.class);
-    private static final int MAX_CONTEXT_SNIPPET_LEN = 300;
     private static final int MAX_MATCHED_CHUNK_LEN = 800;
     private static final int MAX_EVIDENCE_SNIPPET_LEN = 160;
     private static final int GENERATION_COMPLETION_TIMEOUT_SECONDS = 120;
@@ -272,13 +271,15 @@ public class ChatHandler {
             AgentToolRegistry.ToolExecutionResult toolResult =
                     agentToolRegistry.executeTool(toolCall.name(), toolCall.arguments(), userId, toolChunkConsumer);
 
-            // search_knowledge 返回的 SearchResult 列表与模型 prompt 中的 [N] 编号一一对应，
-            // 必须把它落到 generationReferenceMappings 里，否则前端点击引用拿不到 MD5/页码。
-            if ("search_knowledge".equals(toolCall.name())) {
-                replaceReferencesFromSearchTool(generationId, userMessage, toolResult);
-            }
-
+            // search_knowledge 的结果必须落进 generationReferenceMappings，否则前端点击引用拿不到 MD5/页码。
+            // 引用编号跨多轮检索全局递增，所以 tool 内容也要重排成全局编号版本后再交给模型。
             String content = toolResult.content();
+            if ("search_knowledge".equals(toolCall.name())) {
+                String renumberedContent = mergeReferencesFromSearchTool(generationId, userMessage, toolResult);
+                if (renumberedContent != null) {
+                    content = renumberedContent;
+                }
+            }
             if (content == null || content.isBlank()) {
                 content = "工具 " + toolCall.name() + " 执行成功，但没有返回可展示内容。";
             }
@@ -302,34 +303,55 @@ public class ChatHandler {
         }
     }
 
-    private void replaceReferencesFromSearchTool(String generationId,
+    /**
+     * 把本轮 search_knowledge 的结果合并进当前生成任务的引用映射，并返回按全局编号重排后的 tool 内容。
+     * 编号跨多轮检索全局递增（新一轮从当前最大编号 +1 开始），旧编号保持有效——
+     * 最终回答可能同时引用多轮检索到的片段，覆盖式保存会让早期编号解析到错误的文件。
+     *
+     * @return 全局编号版本的 tool 内容；结果为空或无法解析时返回 null，调用方沿用原始内容
+     */
+    private String mergeReferencesFromSearchTool(String generationId,
                                                  String userMessage,
                                                  AgentToolRegistry.ToolExecutionResult toolResult) {
         if (toolResult == null || toolResult.data() == null) {
-            return;
+            return null;
         }
         Object resultsObj = toolResult.data().get("results");
         if (!(resultsObj instanceof List<?> rawList) || rawList.isEmpty()) {
-            return;
+            return null;
         }
 
-        Map<Integer, ReferenceInfo> mapping = new HashMap<>();
-        int referenceNumber = 1;
+        Map<Integer, ReferenceInfo> merged = new HashMap<>();
+        Map<Integer, ReferenceInfo> existing = generationReferenceMappings.get(generationId);
+        int startNumber = 1;
+        if (existing != null && !existing.isEmpty()) {
+            merged.putAll(existing);
+            startNumber = existing.keySet().stream().mapToInt(Integer::intValue).max().orElse(0) + 1;
+        }
+
+        List<SearchResult> results = new ArrayList<>();
+        int nextNumber = startNumber;
         for (Object item : rawList) {
-            if (!(item instanceof SearchResult result) || result.getFileMd5() == null) {
+            if (!(item instanceof SearchResult result)) {
                 continue;
             }
-            String fileLabel = result.getFileName() != null ? result.getFileName() : "unknown";
-            mapping.put(referenceNumber, buildReferenceInfo(result, fileLabel, userMessage));
-            referenceNumber++;
+            // 映射编号必须与 formatSearchResults 的展示编号一一对齐，fileMd5 为空的结果也要占号
+            results.add(result);
+            if (result.getFileMd5() != null) {
+                String fileLabel = result.getFileName() != null ? result.getFileName() : "unknown";
+                merged.put(nextNumber, buildReferenceInfo(result, fileLabel, userMessage));
+            }
+            nextNumber++;
         }
-        if (mapping.isEmpty()) {
-            return;
+        if (results.isEmpty()) {
+            return null;
         }
-        // 模型每次 search_knowledge 都会拿到 [1]..[K] 重新编号，因此按"覆盖"语义保存最新一次的引用映射。
-        generationReferenceMappings.put(generationId, mapping);
-        chatGenerationStateService.updateReferenceMappings(generationId, toSerializableReferenceMappings(mapping));
-        logger.info("ReAct search_knowledge 引用映射已刷新: generationId={}, count={}", generationId, mapping.size());
+
+        generationReferenceMappings.put(generationId, merged);
+        chatGenerationStateService.updateReferenceMappings(generationId, toSerializableReferenceMappings(merged));
+        logger.info("ReAct search_knowledge 引用映射已合并: generationId={}, 本轮编号 [{}-{}], 累计 {} 条",
+                generationId, startNumber, nextNumber - 1, merged.size());
+        return agentToolRegistry.formatSearchResults(results, startNumber);
     }
 
     private record ExecutedToolResult(String content, boolean streamedToUser) {
@@ -706,52 +728,6 @@ public class ChatHandler {
             serialized.put(String.valueOf(entry.getKey()), item);
         }
         return serialized;
-    }
-
-    private String buildContext(List<SearchResult> searchResults, String generationId, String userMessage) {
-        if (searchResults == null || searchResults.isEmpty()) {
-            // 返回空字符串，让 LLM provider 按"无检索结果"逻辑处理
-            return "";
-        }
-
-        // 创建当前生成任务的引用映射
-        Map<Integer, ReferenceInfo> referenceMapping = new HashMap<>();
-
-        StringBuilder context = new StringBuilder();
-        for (int i = 0; i < searchResults.size(); i++) {
-            SearchResult result = searchResults.get(i);
-            String snippet = result.getTextContent();
-            if (snippet.length() > MAX_CONTEXT_SNIPPET_LEN) {
-                snippet = snippet.substring(0, MAX_CONTEXT_SNIPPET_LEN) + "…";
-            }
-            String fileLabel = result.getFileName() != null ? result.getFileName() : "unknown";
-            String fileMd5 = result.getFileMd5();
-
-            // 格式：[1] (test1.txt | 第5页) 文件内容... 或 [1] (test1.txt) 文件内容...
-            // 有页码时显示页码，方便AI引用
-            Integer pageNum = result.getPageNumber();
-            if (pageNum != null && pageNum > 0) {
-                context.append(String.format("[%d] (%s | 第%d页) %s\n", i + 1, fileLabel, pageNum, snippet));
-            } else {
-                context.append(String.format("[%d] (%s) %s\n", i + 1, fileLabel, snippet));
-            }
-
-            // 保存引用编号到MD5的映射
-            if (fileMd5 != null) {
-                ReferenceInfo detail = buildReferenceInfo(result, fileLabel, userMessage);
-                referenceMapping.put(i + 1, detail);
-                // 详细日志：记录每个引用编号的映射关系
-                logger.info("引用映射: generationId={}, 引用编号#{}={}, 文件名={}, MD5={}, page={}, retrievalMode={}, chunkId={}",
-                    generationId, i + 1, fileLabel, fileMd5, result.getPageNumber(), detail.retrievalMode(), detail.chunkId());
-            }
-        }
-
-        // 保存当前生成任务的引用映射
-        generationReferenceMappings.put(generationId, referenceMapping);
-        chatGenerationStateService.updateReferenceMappings(generationId, toSerializableReferenceMappings(referenceMapping));
-        logger.info("保存生成任务 {} 的引用映射，共 {} 条: {}", generationId, referenceMapping.size(), referenceMapping);
-
-        return context.toString();
     }
 
     private void sendGenerationStart(String userId, String generationId, String conversationId) {

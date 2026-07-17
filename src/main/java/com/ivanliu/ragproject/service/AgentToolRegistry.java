@@ -8,9 +8,11 @@ import co.elastic.clients.elasticsearch._types.StoreStats;
 import co.elastic.clients.elasticsearch.indices.IndicesStatsResponse;
 import co.elastic.clients.elasticsearch.indices.stats.IndicesStats;
 import com.ivanliu.ragproject.client.DeepSeekClient;
+import com.ivanliu.ragproject.client.RerankClient;
 import com.ivanliu.ragproject.entity.SearchResult;
 import com.ivanliu.ragproject.model.FileUpload;
 import com.ivanliu.ragproject.repository.FileUploadRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -35,19 +37,29 @@ public class AgentToolRegistry {
     private final StringRedisTemplate stringRedisTemplate;
     private final ElasticsearchClient elasticsearchClient;
     private final FileUploadRepository fileUploadRepository;
+    private final RerankClient rerankClient;
     private final List<AgentTool> tools;
     private final Map<String, ToolHandler> handlers;
+
+    /**
+     * rerank 校准分（0~1）低于该阈值时，在 search_knowledge 的 tool 结果中显式提示模型
+     * "结果可能不相关，建议改写 query 重试"，把检索质量判断从模型的隐式感觉变成显式协议。
+     */
+    @Value("${agent.search.low-score-warn-threshold:0.4}")
+    private double lowScoreWarnThreshold;
 
     public AgentToolRegistry(HybridSearchService hybridSearchService,
                              DeepSeekClient deepSeekClient,
                              StringRedisTemplate stringRedisTemplate,
                              ElasticsearchClient elasticsearchClient,
-                             FileUploadRepository fileUploadRepository) {
+                             FileUploadRepository fileUploadRepository,
+                             RerankClient rerankClient) {
         this.hybridSearchService = hybridSearchService;
         this.deepSeekClient = deepSeekClient;
         this.stringRedisTemplate = stringRedisTemplate;
         this.elasticsearchClient = elasticsearchClient;
         this.fileUploadRepository = fileUploadRepository;
+        this.rerankClient = rerankClient;
         this.tools = List.of(
                 searchKnowledgeTool(),
                 generateSummaryTool(),
@@ -99,7 +111,8 @@ public class AgentToolRegistry {
         data.put("query", query);
         data.put("topK", topK);
         data.put("results", results);
-        return new ToolExecutionResult("search_knowledge", true, formatSearchResults(results), data);
+        // ReAct 路径会用全局起始编号重新调用 formatSearchResults，这里默认从 [1] 开始
+        return new ToolExecutionResult("search_knowledge", true, formatSearchResults(results, 1), data);
     }
 
     private ToolExecutionResult executeGenerateSummary(Map<String, Object> arguments,
@@ -244,17 +257,28 @@ public class AgentToolRegistry {
         return schema;
     }
 
-    private String formatSearchResults(List<SearchResult> results) {
+    /**
+     * 把检索结果格式化为交给模型的 tool 内容。
+     *
+     * @param startNumber 本批片段的起始来源编号；ReAct 多轮检索时由 ChatHandler 传入全局递增值，
+     *                    保证编号跨轮唯一且与引用映射对齐
+     */
+    public String formatSearchResults(List<SearchResult> results, int startNumber) {
         if (results == null || results.isEmpty()) {
-            return "未检索到相关知识库片段。";
+            return "未检索到相关知识库片段。建议改写 query 后重试：保留用户原话中的核心实体与缩写，"
+                    + "尝试同义词、中英文名互换或展开缩写；若多次改写仍无结果，再向用户说明知识库暂无相关材料并请其补充线索。";
         }
 
-        StringBuilder output = new StringBuilder("检索到 ").append(results.size()).append(" 个知识库片段。")
+        int endNumber = startNumber + results.size() - 1;
+        StringBuilder output = new StringBuilder("检索到 ").append(results.size())
+                .append(" 个知识库片段，来源编号 [").append(startNumber).append("]-[").append(endNumber)
+                .append("]（编号跨多轮检索全局唯一，引用时使用片段前标注的编号）。")
                 .append("请基于这些片段回答用户问题；不得声称知识库暂无相关信息。")
                 .append("如果片段信息不足，请说明“基于已检索片段只能确认……”并标注来源编号。");
+        appendQualitySignal(output, results);
         for (int i = 0; i < results.size(); i++) {
             SearchResult result = results.get(i);
-            output.append("\n\n[").append(i + 1).append("] ");
+            output.append("\n\n[").append(startNumber + i).append("] ");
             if (result.getFileName() != null && !result.getFileName().isBlank()) {
                 output.append(result.getFileName()).append(" ");
             }
@@ -270,6 +294,37 @@ public class AgentToolRegistry {
                     .append(limitText(result.getMatchedChunkText() != null ? result.getMatchedChunkText() : result.getTextContent(), 1200));
         }
         return output.toString();
+    }
+
+    /**
+     * 在 tool 内容头部附加检索质量信号，让模型显式感知“这次搜得好不好”。
+     * 只有 rerank 开启时分数才是 0~1 的校准相关性分，阈值判断才有意义；
+     * 未开启时 ES 混合分量纲不定，只报数值供同批次相对比较，不做好坏判断。
+     */
+    private void appendQualitySignal(StringBuilder output, List<SearchResult> results) {
+        double maxScore = -1d;
+        for (SearchResult result : results) {
+            if (result.getScore() != null) {
+                maxScore = Math.max(maxScore, result.getScore());
+            }
+        }
+        if (maxScore < 0) {
+            return;
+        }
+
+        if (rerankClient.isEnabled()) {
+            output.append(String.format(Locale.ROOT,
+                    "\n检索质量：最高相关性分 %.4f（rerank 校准分，范围约 0~1，越高越相关，参考阈值 %.2f）。",
+                    maxScore, lowScoreWarnThreshold));
+            if (maxScore < lowScoreWarnThreshold) {
+                output.append("警告：全部片段相关性偏低，很可能未命中目标资料。")
+                        .append("请优先改写 query（保留核心实体与缩写，尝试同义词、中英文名互换、展开缩写）后重新调用 search_knowledge；")
+                        .append("若改写重试后仍偏低，再基于现有片段谨慎作答并明确说明依据不足。");
+            }
+        } else {
+            output.append(String.format(Locale.ROOT,
+                    "\n检索质量：最高分 %.4f（未启用 rerank 校准，分数仅供同批片段相对比较）。", maxScore));
+        }
     }
 
     private String formatKnowledgeStats(Map<String, Object> data) {
