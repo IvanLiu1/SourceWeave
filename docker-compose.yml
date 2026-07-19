@@ -76,13 +76,13 @@ services:
       - es-data:/usr/share/elasticsearch/data
     environment:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?请在 .env 中设置 ELASTIC_PASSWORD}
-      - node.name=pai-smart-es01
+      - node.name=ragproject-es01
       - discovery.type=single-node
       - xpack.license.self_generated.type=basic
       - xpack.security.enabled=true
       - xpack.security.enrollment.enabled=false
       - xpack.security.http.ssl.enabled=false
-      - cluster.name=pai-smart-es-cluster
+      - cluster.name=ragproject-es-cluster
       - ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms1g -Xmx1g}
     deploy:
       resources:

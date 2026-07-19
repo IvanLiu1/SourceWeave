@@ -20,8 +20,7 @@
     "rag",
     "llm",
     "chat",
-    "itwanger",
-    "pai-smart"
+    "ragproject"
   ],
   "engines": {
     "node": ">=18.20.0",

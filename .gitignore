@@ -51,9 +51,9 @@ coverage
 
 # Editor directories and files
 frontend/.vscode/*
-frontend/!.vscode/extensions.json
-frontend/!.vscode/settings.json
-frontend/!.vscode/launch.json
+!frontend/.vscode/extensions.json
+!frontend/.vscode/settings.json
+!frontend/.vscode/launch.json
 .idea
 *.suo
 *.ntvs*
@@ -70,8 +70,6 @@ frontend/src/typings/auto-imports.d.ts
 frontend/public/languages
 frontend/public/themes
 src/main/resources/application.yml~
-frontend/paicoding.pem
-frontend/AutoClaw.pem
 *.pem
 src/main/resources/cert
 /.runtime

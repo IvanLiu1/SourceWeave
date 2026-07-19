@@ -4,9 +4,10 @@ const DEFAULTS = {
   apiBase: 'http://127.0.0.1:8081/api/v1',
   wsBase: 'ws://127.0.0.1:8081/chat',
   username: 'admin',
-  password: 'ragproject2026!',
+  // 真实密码请用 --password 参数传入，勿写死在此处
+  password: 'change-me',
   prompt:
-    '请用6个编号小节介绍派聪明的企业知识库与RAG工作流，每节控制在80字左右，最后补3条实施建议。',
+    '请用6个编号小节介绍 ragproject 的企业知识库与RAG工作流，每节控制在80字左右，最后补3条实施建议。',
   disconnectAfterChunks: 10,
   disconnectDelayMs: 50,
   activeCheckDelayMs: 800,
