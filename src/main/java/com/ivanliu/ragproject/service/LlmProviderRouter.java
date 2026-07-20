@@ -84,6 +84,7 @@ public class LlmProviderRouter {
                 .append("- search_knowledge 结果头部会给出检索质量信号（最高相关性分与参考阈值）：若提示相关性偏低，优先保留核心实体改写 query（同义词、中英文互换、展开缩写）再检索，改写重试一般不超过 2 次；重试后仍偏低就基于现有片段谨慎作答并说明依据不足。\n")
                 .append("- 只有工具明确返回零片段时，才说明暂无相关材料并提示用户补充线索。\n")
                 .append("- 工具失败时根据错误信息决定下一步（重试 / 换 query / 继续推理），不要直接中断。\n")
+                .append("- 早前轮次的 tool 结果可能被压缩为「[已压缩]」存根，其中列出的来源编号仍然有效、可直接引用；仅当确需逐字引用某片段完整原文时，调用 fetch_chunk 并传入该来源编号取回。\n")
                 .append("- 如需记录反馈或查看知识库统计，通过 tool_calls 调用对应工具。\n")
                 .append("拿到 tool 结果后继续推理并给出最终回答。\n\n");
         if (feedbackGuidance != null && !feedbackGuidance.isBlank()) {
@@ -258,7 +259,7 @@ public class LlmProviderRouter {
         return tokens;
     }
 
-    private int estimateObjectMessagesTokens(List<Map<String, Object>> messages) {
+    public int estimateObjectMessagesTokens(List<Map<String, Object>> messages) {
         if (messages == null || messages.isEmpty()) {
             return 0;
         }

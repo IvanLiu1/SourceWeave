@@ -9,6 +9,7 @@ import com.ivanliu.ragproject.exception.RateLimitExceededException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,14 @@ public class ChatHandler {
     private static final int MAX_REACT_ROUNDS = 4;
     private static final int MAX_REACT_TOOL_CALLS = 8;
     private static final int REACT_MAX_COMPLETION_TOKENS = 2000;
+
+    /**
+     * ReAct 消息压缩的触发阈值（估算 token）。低于阈值不做任何处理（多数对话零开销），
+     * 超过才把已消费的工具结果替换为存根。默认约为 64K 上下文的 1/8，给系统提示与生成留足余量。
+     */
+    @Value("${agent.react.compact-trigger-tokens:8000}")
+    private int compactTriggerTokens;
+
     private final RedisTemplate<String, String> redisTemplate;
     private final HybridSearchService searchService;
     private final LlmProviderRouter llmProviderRouter;
@@ -185,6 +194,10 @@ public class ChatHandler {
                 return;
             }
 
+            if (round > 1) {
+                compactContextIfNeeded(messages, generationId, round);
+            }
+
             LlmProviderRouter.ReActTurn turn = streamReActTurnBlocking(
                     userId, conversationId, generationId, messages, agentToolRegistry.getTools());
             if (turn == null) {
@@ -234,6 +247,7 @@ public class ChatHandler {
                 "role", "user",
                 "content", "ReAct 轮次预算已用尽，请不要再调用工具，直接基于已有 tool 结果给出最终回答。"
         ));
+        compactContextIfNeeded(messages, generationId, MAX_REACT_ROUNDS + 1);
         LlmProviderRouter.ReActTurn finalTurn = streamReActTurnBlocking(
                 userId, conversationId, generationId, messages, List.of());
         if (finalTurn == null) {
@@ -245,6 +259,59 @@ public class ChatHandler {
         finalizeResponse(userId, userMessage, conversationId, generationId, responseFuture,
                 responseBuilders.get(generationId),
                 new LlmProviderRouter.StreamCompletion(finalTurn.finishReason(), totalPromptTokens, totalCompletionTokens, finalTurn.content().length()));
+    }
+
+    /**
+     * 预算触发的上下文压缩：仅当估算 token 超过阈值才把已消费的工具结果替换为存根，
+     * 多数对话达不到阈值、零额外开销。压缩前后的估算值入日志，用于观测真实 token 分布
+     * （是否需要进一步的 LLM 摘要兜底由这份数据决定）。
+     */
+    private void compactContextIfNeeded(List<Map<String, Object>> messages, String generationId, int round) {
+        int estimatedTokens = llmProviderRouter.estimateObjectMessagesTokens(messages);
+        if (estimatedTokens < compactTriggerTokens) {
+            return;
+        }
+        int compacted = ReActContextCompactor.compactConsumedToolMessages(messages);
+        if (compacted > 0) {
+            logger.info("ReAct 上下文压缩: round={}, 压缩前≈{} tokens(阈值 {}), 压缩 {} 条已消费工具消息, 压缩后≈{} tokens, generationId={}",
+                    round, estimatedTokens, compactTriggerTokens, compacted,
+                    llmProviderRouter.estimateObjectMessagesTokens(messages), generationId);
+        } else {
+            logger.info("ReAct 上下文超过压缩阈值但无可压缩的已消费工具消息: round={}, ≈{} tokens(阈值 {}), generationId={}",
+                    round, estimatedTokens, compactTriggerTokens, generationId);
+        }
+    }
+
+    /**
+     * fetch_chunk 的就地实现：压缩存根的“逃生舱”，按全局来源编号取回片段原文。
+     * 工具定义在 AgentToolRegistry，执行放这里是因为需要访问 generationReferenceMappings。
+     */
+    private AgentToolRegistry.ToolExecutionResult executeFetchChunk(String generationId, Map<String, Object> arguments) {
+        Object raw = arguments == null ? null : arguments.get("refNumber");
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            throw new IllegalArgumentException("refNumber 不能为空");
+        }
+        int refNumber = raw instanceof Number number ? number.intValue() : Integer.parseInt(String.valueOf(raw).trim());
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("refNumber", refNumber);
+        ReferenceInfo detail = getReferenceDetail(generationId, refNumber);
+        if (detail == null) {
+            return new AgentToolRegistry.ToolExecutionResult("fetch_chunk", false,
+                    "未找到来源编号 [" + refNumber + "] 对应的片段，请确认编号来自本次对话的检索结果。", data);
+        }
+
+        StringBuilder content = new StringBuilder("[").append(refNumber).append("] ");
+        if (detail.fileName() != null && !detail.fileName().isBlank()) {
+            content.append(detail.fileName()).append(' ');
+        }
+        content.append("(fileMd5=").append(detail.fileMd5());
+        if (detail.pageNumber() != null) {
+            content.append(", page=").append(detail.pageNumber());
+        }
+        content.append(")\n")
+                .append(detail.matchedChunkText() != null ? detail.matchedChunkText() : "（该片段未保存原文摘录）");
+        return new AgentToolRegistry.ToolExecutionResult("fetch_chunk", true, content.toString(), data);
     }
 
     private ExecutedToolResult executeToolForReAct(String userId,
@@ -268,8 +335,10 @@ public class ChatHandler {
                         appendStreamChunk(userId, generationId, conversationId, chunk);
                     }
                     : null;
-            AgentToolRegistry.ToolExecutionResult toolResult =
-                    agentToolRegistry.executeTool(toolCall.name(), toolCall.arguments(), userId, toolChunkConsumer);
+            // fetch_chunk 依赖当前生成任务的引用映射，由 ChatHandler 就地执行（见 AgentToolRegistry 注释）
+            AgentToolRegistry.ToolExecutionResult toolResult = "fetch_chunk".equals(toolCall.name())
+                    ? executeFetchChunk(generationId, toolCall.arguments())
+                    : agentToolRegistry.executeTool(toolCall.name(), toolCall.arguments(), userId, toolChunkConsumer);
 
             // search_knowledge 的结果必须落进 generationReferenceMappings，否则前端点击引用拿不到 MD5/页码。
             // 引用编号跨多轮检索全局递增，所以 tool 内容也要重排成全局编号版本后再交给模型。

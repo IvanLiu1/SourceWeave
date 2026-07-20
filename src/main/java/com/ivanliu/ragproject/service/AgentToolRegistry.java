@@ -64,8 +64,11 @@ public class AgentToolRegistry {
                 searchKnowledgeTool(),
                 generateSummaryTool(),
                 submitFeedbackTool(),
-                knowledgeStatsTool()
+                knowledgeStatsTool(),
+                fetchChunkTool()
         );
+        // fetch_chunk 不在 handlers 里：它依赖当前生成任务的引用映射（generationReferenceMappings），
+        // 由持有该状态的 ChatHandler 在 executeToolForReAct 中就地执行，避免注册表反向依赖 ChatHandler
         this.handlers = Map.of(
                 "search_knowledge", this::executeSearchKnowledge,
                 "generate_summary", this::executeGenerateSummary,
@@ -223,6 +226,16 @@ public class AgentToolRegistry {
                         "rating", ratingSchema,
                         "reason", stringSchema("用户给出的满意或不满意原因，可为空。")
                 ), List.of("rating"))
+        );
+    }
+
+    private AgentTool fetchChunkTool() {
+        return new AgentTool(
+                "fetch_chunk",
+                "取回此前轮次已检索片段的完整原文。仅当早前轮次的检索结果被压缩为「[已压缩]」存根、且回答确实需要逐字引用该片段原文时调用；引用标注只需编号本身，无需取回原文。",
+                objectSchema(Map.of(
+                        "refNumber", integerSchema("片段的全局来源编号，即检索结果中 [N] 标注的数字。")
+                ), List.of("refNumber"))
         );
     }
 
