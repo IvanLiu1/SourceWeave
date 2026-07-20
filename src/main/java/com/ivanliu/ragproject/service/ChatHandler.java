@@ -429,48 +429,6 @@ public class ChatHandler {
         sendResponseChunk(userId, generationId, conversationId, chunk);
     }
 
-    private void submitCompletionMonitor(String userId, String userMessage, String conversationId, String generationId,
-                                         CompletableFuture<String> responseFuture) {
-        try {
-            chatMonitorExecutor.execute(() -> {
-                try {
-                    if (finishCancelledGeneration(generationId, responseFuture, responseBuilders.get(generationId))) {
-                        return;
-                    }
-
-                    responseFuture.get(GENERATION_COMPLETION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                } catch (TimeoutException e) {
-                    if (finishCancelledGeneration(generationId, responseFuture, responseBuilders.get(generationId))) {
-                        return;
-                    }
-                    RuntimeException exception = new RuntimeException("模型响应超时，请稍后重试");
-                    if (responseFuture.completeExceptionally(exception)) {
-                        handleError(userId, generationId, exception);
-                        sendCompletionNotification(userId, generationId, conversationId, true, false);
-                        chatGenerationStateService.markFailed(generationId, exception.getMessage());
-                        cleanupGenerationState(generationId, exception);
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } catch (ExecutionException ignored) {
-                    // 上游错误分支已经处理并完成了当前 future，这里只负责等待兜底。
-                } catch (Exception e) {
-                    logger.error("检查响应完成时出错: {}", e.getMessage(), e);
-                    if (responseFuture.completeExceptionally(e)) {
-                        chatGenerationStateService.markFailed(generationId, e.getMessage());
-                        cleanupGenerationState(generationId, e);
-                    }
-                }
-            });
-        } catch (RejectedExecutionException ex) {
-            logger.warn("聊天监控线程池已满，generationId: {}", generationId);
-            RuntimeException busyException = new RuntimeException("系统繁忙，请稍后重试");
-            handleError(userId, generationId, busyException);
-            chatGenerationStateService.markFailed(generationId, busyException.getMessage());
-            cleanupGenerationState(generationId, ex);
-        }
-    }
-
     private void finalizeResponse(String userId, String userMessage, String conversationId, String generationId,
                                   CompletableFuture<String> responseFuture,
                                   StringBuilder responseBuilder,
@@ -855,18 +813,6 @@ public class ChatHandler {
         ));
 
         logger.info("已停止上游流式生成: generationId={}", targetGenerationId);
-    }
-
-    /**
-     * 根据会话ID和引用编号获取文件MD5
-     *
-     * @param sessionId WebSocket会话ID
-     * @param referenceNumber 引用编号
-     * @return 文件MD5，如果找不到则返回null
-     */
-    public String getReferenceMd5(String generationId, int referenceNumber) {
-        ReferenceInfo detail = getReferenceDetail(generationId, referenceNumber);
-        return detail != null ? detail.fileMd5() : null;
     }
 
     public ReferenceInfo getReferenceDetail(String generationId, int referenceNumber) {

@@ -46,66 +46,6 @@ public class LlmProviderRouter {
         this.objectMapper = objectMapper;
     }
 
-    public StreamHandle streamResponse(String requesterId,
-                                       String userMessage,
-                                       String context,
-                                       List<Map<String, String>> history,
-                                       Consumer<String> onChunk,
-                                       Consumer<Throwable> onError,
-                                       Consumer<StreamCompletion> onComplete) {
-
-        ModelProviderConfigService.ActiveProviderView provider = modelProviderConfigService.getActiveProvider(ModelProviderConfigService.SCOPE_LLM);
-        Map<String, Object> request = buildRequest(provider.model(), userMessage, context, history);
-        @SuppressWarnings("unchecked")
-        List<Map<String, String>> messages = (List<Map<String, String>>) request.get("messages");
-        int estimatedPromptTokens = usageQuotaService.estimateChatTokens(messages);
-        int maxCompletionTokens = aiProperties.getGeneration().getMaxTokens() != null
-                ? aiProperties.getGeneration().getMaxTokens()
-                : 2000;
-        UsageQuotaService.TokenReservationBundle reservation = rateLimitService.reserveLlmUsage(
-                requesterId, estimatedPromptTokens, maxCompletionTokens);
-        StreamUsageTracker usageTracker = new StreamUsageTracker(reservation, estimatedPromptTokens);
-
-        try {
-            Disposable subscription = buildClient(provider)
-                    .post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(request)
-                    .retrieve()
-                    .bodyToFlux(String.class)
-                    .subscribe(
-                            chunk -> processChunk(chunk, usageTracker, onChunk),
-                            error -> {
-                                settleUsage(usageTracker);
-                                onError.accept(error);
-                            },
-                            () -> {
-                                settleUsage(usageTracker);
-                                logger.info("LLM 流式响应完成: provider={}, model={}, finishReason={}, promptTokens={}, completionTokens={}, responseChars={}",
-                                        provider.provider(),
-                                        provider.model(),
-                                        usageTracker.finishReason == null ? "unknown" : usageTracker.finishReason,
-                                        usageTracker.promptTokens,
-                                        usageTracker.completionTokens,
-                                        usageTracker.responseContent.length());
-                                if (onComplete != null) {
-                                    onComplete.accept(new StreamCompletion(
-                                            usageTracker.finishReason,
-                                            usageTracker.promptTokens,
-                                            usageTracker.completionTokens,
-                                            usageTracker.responseContent.length()
-                                    ));
-                                }
-                            }
-                    );
-            return new StreamHandle(subscription, () -> settleUsage(usageTracker));
-        } catch (Exception exception) {
-            usageQuotaService.abortReservation(reservation);
-            throw exception;
-        }
-    }
-
     public List<Map<String, Object>> buildReActMessages(String userMessage,
                                                         String context,
                                                         List<Map<String, String>> history) {
@@ -172,39 +112,6 @@ public class LlmProviderRouter {
         }
         messages.add(newMessage("user", userMessage));
         return messages;
-    }
-
-    public ReActTurn completeReActTurn(String requesterId,
-                                       List<Map<String, Object>> messages,
-                                       List<AgentToolRegistry.AgentTool> tools,
-                                       int maxCompletionTokens) {
-        ModelProviderConfigService.ActiveProviderView provider =
-                modelProviderConfigService.getActiveProvider(ModelProviderConfigService.SCOPE_LLM);
-        Map<String, Object> request = buildReActRequest(provider.model(), messages, tools, maxCompletionTokens, false);
-
-        int estimatedPromptTokens = estimateObjectMessagesTokens(messages)
-                + (tools == null || tools.isEmpty() ? 0 : estimateToolsTokens(tools));
-        UsageQuotaService.TokenReservationBundle reservation = rateLimitService.reserveLlmUsage(
-                requesterId, estimatedPromptTokens, maxCompletionTokens);
-
-        try {
-            String responseBody = buildClient(provider)
-                    .post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(request)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block(Duration.ofSeconds(90));
-            ReActTurn turn = parseReActTurn(responseBody, estimatedPromptTokens);
-            usageQuotaService.settleReservation(reservation, turn.promptTokens() + turn.completionTokens());
-            logger.info("ReAct 回合完成: provider={}, model={}, finishReason={}, toolCalls={}, contentChars={}",
-                    provider.provider(), provider.model(), turn.finishReason(), turn.toolCalls().size(), turn.content().length());
-            return turn;
-        } catch (Exception exception) {
-            usageQuotaService.abortReservation(reservation);
-            throw new RuntimeException("ReAct 模型回合调用失败", exception);
-        }
     }
 
     public StreamHandle streamReActTurn(String requesterId,
@@ -306,58 +213,6 @@ public class LlmProviderRouter {
         return request;
     }
 
-    private Map<String, Object> buildRequest(String model,
-                                             String userMessage,
-                                             String context,
-                                             List<Map<String, String>> history) {
-        Map<String, Object> request = new java.util.HashMap<>();
-        request.put("model", model);
-        request.put("messages", buildMessages(userMessage, context, history));
-        request.put("stream", true);
-        request.put("stream_options", Map.of("include_usage", true));
-
-        AiProperties.Generation gen = aiProperties.getGeneration();
-        if (gen.getTemperature() != null) {
-            request.put("temperature", gen.getTemperature());
-        }
-        if (gen.getTopP() != null) {
-            request.put("top_p", gen.getTopP());
-        }
-        if (gen.getMaxTokens() != null) {
-            request.put("max_tokens", gen.getMaxTokens());
-        }
-        return request;
-    }
-
-    private List<Map<String, String>> buildMessages(String userMessage,
-                                                    String context,
-                                                    List<Map<String, String>> history) {
-        List<Map<String, String>> messages = new ArrayList<>();
-        AiProperties.Prompt promptCfg = aiProperties.getPrompt();
-
-        StringBuilder sysBuilder = new StringBuilder();
-        if (promptCfg.getRules() != null) {
-            sysBuilder.append(promptCfg.getRules()).append("\n\n");
-        }
-
-        String refStart = promptCfg.getRefStart() != null ? promptCfg.getRefStart() : "<<REF>>";
-        String refEnd = promptCfg.getRefEnd() != null ? promptCfg.getRefEnd() : "<<END>>";
-        sysBuilder.append(refStart).append("\n");
-        if (context != null && !context.isEmpty()) {
-            sysBuilder.append(context);
-        } else {
-            sysBuilder.append(promptCfg.getNoResultText() != null ? promptCfg.getNoResultText() : "（本轮无检索结果）").append("\n");
-        }
-        sysBuilder.append(refEnd);
-
-        messages.add(Map.of("role", "system", "content", sysBuilder.toString()));
-        if (history != null && !history.isEmpty()) {
-            messages.addAll(history);
-        }
-        messages.add(Map.of("role", "user", "content", userMessage));
-        return messages;
-    }
-
     private Map<String, Object> newMessage(String role, String content) {
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("role", role);
@@ -429,102 +284,6 @@ public class LlmProviderRouter {
             }
         }
         return Math.max(tokens, 1);
-    }
-
-    private ReActTurn parseReActTurn(String responseBody, int estimatedPromptTokens) {
-        if (responseBody == null || responseBody.isBlank()) {
-            throw new IllegalStateException("ReAct 模型响应为空");
-        }
-        try {
-            JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode choice = root.path("choices").path(0);
-            JsonNode messageNode = choice.path("message");
-            if (!messageNode.isObject()) {
-                throw new IllegalStateException("ReAct 模型响应缺少 message");
-            }
-
-            Map<String, Object> assistantMessage = objectMapper.convertValue(
-                    messageNode,
-                    new TypeReference<Map<String, Object>>() {
-                    });
-            assistantMessage.put("role", "assistant");
-            if (!assistantMessage.containsKey("content") || assistantMessage.get("content") == null) {
-                assistantMessage.put("content", "");
-            }
-
-            List<ToolCallDecision> toolCalls = new ArrayList<>();
-            JsonNode toolCallsNode = messageNode.path("tool_calls");
-            if (toolCallsNode.isArray()) {
-                for (JsonNode call : toolCallsNode) {
-                    JsonNode function = call.path("function");
-                    String name = function.path("name").asText("");
-                    if (name.isBlank()) {
-                        continue;
-                    }
-                    String argumentsJson = function.path("arguments").asText("{}");
-                    Map<String, Object> arguments = objectMapper.readValue(
-                            argumentsJson == null || argumentsJson.isBlank() ? "{}" : argumentsJson,
-                            new TypeReference<Map<String, Object>>() {
-                            });
-                    toolCalls.add(new ToolCallDecision(call.path("id").asText(""), name, arguments));
-                }
-            }
-
-            JsonNode usage = root.path("usage");
-            int promptTokens = usage.path("prompt_tokens").asInt(estimatedPromptTokens);
-            int completionTokens = usage.path("completion_tokens").asInt(
-                    usageQuotaService.estimateTextTokens(messageNode.path("content").asText(""))
-                            + estimateObjectMessagesTokens(List.of(assistantMessage))
-            );
-            return new ReActTurn(
-                    messageNode.path("content").asText("").trim(),
-                    toolCalls,
-                    assistantMessage,
-                    choice.path("finish_reason").asText("unknown"),
-                    promptTokens,
-                    completionTokens
-            );
-        } catch (Exception exception) {
-            throw new RuntimeException("解析 ReAct 模型响应失败", exception);
-        }
-    }
-
-    private void processChunk(String rawChunk, StreamUsageTracker usageTracker, Consumer<String> onChunk) {
-        try {
-            for (String chunk : extractPayloads(rawChunk)) {
-                if ("[DONE]".equals(chunk)) {
-                    continue;
-                }
-
-                JsonNode node = objectMapper.readTree(chunk);
-                JsonNode usageNode = node.path("usage");
-                if (usageNode.isObject()) {
-                    usageTracker.promptTokens = usageNode.path("prompt_tokens").asInt(usageTracker.promptTokens);
-                    usageTracker.completionTokens = usageNode.path("completion_tokens").asInt(usageTracker.completionTokens);
-                }
-
-                JsonNode choiceNode = node.path("choices").path(0);
-                JsonNode finishReasonNode = choiceNode.path("finish_reason");
-                if (!finishReasonNode.isMissingNode() && !finishReasonNode.isNull()) {
-                    String finishReason = finishReasonNode.asText("");
-                    if (!finishReason.isBlank()) {
-                        usageTracker.finishReason = finishReason;
-                    }
-                }
-
-                String content = node.path("choices")
-                        .path(0)
-                        .path("delta")
-                        .path("content")
-                        .asText("");
-                if (!content.isEmpty()) {
-                    usageTracker.responseContent.append(content);
-                    onChunk.accept(content);
-                }
-            }
-        } catch (Exception exception) {
-            logger.error("处理模型响应数据块失败: {}", exception.getMessage(), exception);
-        }
     }
 
     private void processReActStreamChunk(String rawChunk,
@@ -606,22 +365,6 @@ public class LlmProviderRouter {
         return payloads;
     }
 
-    private void settleUsage(StreamUsageTracker usageTracker) {
-        if (usageTracker == null || usageTracker.settled) {
-            return;
-        }
-
-        usageTracker.settled = true;
-        int actualPromptTokens = usageTracker.promptTokens > 0
-                ? usageTracker.promptTokens
-                : usageTracker.estimatedPromptTokens;
-        int actualCompletionTokens = usageTracker.completionTokens > 0
-                ? usageTracker.completionTokens
-                : usageQuotaService.estimateTextTokens(usageTracker.responseContent.toString());
-
-        usageQuotaService.settleReservation(usageTracker.reservation, actualPromptTokens + actualCompletionTokens);
-    }
-
     private void settleReActStreamUsage(ReActStreamAccumulator accumulator) {
         if (accumulator == null || accumulator.settled) {
             return;
@@ -636,21 +379,6 @@ public class LlmProviderRouter {
                 : usageQuotaService.estimateTextTokens(accumulator.content.toString())
                 + estimateObjectMessagesTokens(List.of(accumulator.assistantMessage()));
         usageQuotaService.settleReservation(accumulator.reservation, actualPromptTokens + actualCompletionTokens);
-    }
-
-    private static final class StreamUsageTracker {
-        private final UsageQuotaService.TokenReservationBundle reservation;
-        private final int estimatedPromptTokens;
-        private final StringBuilder responseContent = new StringBuilder();
-        private volatile int promptTokens;
-        private volatile int completionTokens;
-        private volatile String finishReason;
-        private volatile boolean settled;
-
-        private StreamUsageTracker(UsageQuotaService.TokenReservationBundle reservation, int estimatedPromptTokens) {
-            this.reservation = reservation;
-            this.estimatedPromptTokens = estimatedPromptTokens;
-        }
     }
 
     private static final class ReActStreamAccumulator {

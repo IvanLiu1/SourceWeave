@@ -50,13 +50,6 @@ public class ConversationService {
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
 
-    public void recordConversation(String username, String question, String answer) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
-
-        saveConversation(user, question, answer, null, null);
-    }
-
     @Transactional
     public void recordConversation(Long userId, String question, String answer, String conversationId,
                                    Map<String, Map<String, Object>> referenceMappings) {
@@ -148,15 +141,6 @@ public class ConversationService {
         }
         String redisKey = RedisKeys.currentConversation(String.valueOf(userId));
         redisTemplate.opsForValue().set(redisKey, conversationId, Duration.ofDays(7));
-    }
-
-    public void updateSessionTitle(String conversationId, String title) {
-        sessionRepository.findByConversationId(conversationId).ifPresent(session -> {
-            if (session.getTitle() == null || "新对话".equals(session.getTitle())) {
-                session.setTitle(title);
-                sessionRepository.save(session);
-            }
-        });
     }
 
     public void archiveConversationSession(String conversationId) {

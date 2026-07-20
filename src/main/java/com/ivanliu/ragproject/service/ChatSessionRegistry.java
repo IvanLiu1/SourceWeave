@@ -30,10 +30,6 @@ public class ChatSessionRegistry {
         sessions.computeIfPresent(userId, (key, current) -> current == session ? null : current);
     }
 
-    public WebSocketSession getCurrentSession(String userId) {
-        return sessions.get(userId);
-    }
-
     public void sendJsonToUser(String userId, Map<String, ?> payload) {
         WebSocketSession session = sessions.get(userId);
         if (session == null || !session.isOpen()) {

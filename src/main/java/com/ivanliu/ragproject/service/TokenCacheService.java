@@ -95,21 +95,6 @@ public class TokenCacheService {
     }
     
     /**
-     * 从缓存中获取token信息
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getTokenInfo(String tokenId) {
-        try {
-            String key = TOKEN_PREFIX + tokenId;
-            Object tokenInfo = redisTemplate.opsForValue().get(key);
-            return tokenInfo != null ? (Map<String, Object>) tokenInfo : null;
-        } catch (Exception e) {
-            logger.error("Failed to get token info: {}", tokenId, e);
-            return null;
-        }
-    }
-    
-    /**
      * 验证refresh token是否有效
      */
     public boolean isRefreshTokenValid(String refreshTokenId) {
@@ -119,21 +104,6 @@ public class TokenCacheService {
         } catch (Exception e) {
             logger.error("Failed to check refresh token validity: {}", refreshTokenId, e);
             return false;
-        }
-    }
-    
-    /**
-     * 获取refresh token信息
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getRefreshTokenInfo(String refreshTokenId) {
-        try {
-            String key = REFRESH_PREFIX + refreshTokenId;
-            Object refreshInfo = redisTemplate.opsForValue().get(key);
-            return refreshInfo != null ? (Map<String, Object>) refreshInfo : null;
-        } catch (Exception e) {
-            logger.error("Failed to get refresh token info: {}", refreshTokenId, e);
-            return null;
         }
     }
     
@@ -237,17 +207,4 @@ public class TokenCacheService {
         }
     }
     
-    /**
-     * 获取用户的活跃token数量
-     */
-    public long getUserActiveTokenCount(String userId) {
-        try {
-            String key = USER_TOKENS_PREFIX + userId + ":tokens";
-            Long count = redisTemplate.opsForSet().size(key);
-            return count != null ? count : 0;
-        } catch (Exception e) {
-            logger.error("Failed to get user active token count: {}", userId, e);
-            return 0;
-        }
-    }
 }

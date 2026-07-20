@@ -56,9 +56,9 @@ class ConversationServiceTest {
     void testRecordConversation() {
         User user = new User();
         user.setId(1L);
-        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        conversationService.recordConversation("testuser", "What is AI?", "AI stands for Artificial Intelligence.");
+        conversationService.recordConversation(1L, "What is AI?", "AI stands for Artificial Intelligence.", "conv-1", null);
 
         verify(conversationRepository, times(1)).save(any(Conversation.class));
     }
