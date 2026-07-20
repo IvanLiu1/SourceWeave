@@ -3,6 +3,7 @@ package com.ivanliu.ragproject.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ivanliu.ragproject.client.ProviderWebClientFactory;
 import com.ivanliu.ragproject.config.AiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,17 +34,20 @@ public class LlmProviderRouter {
     private final UsageQuotaService usageQuotaService;
     private final ModelProviderConfigService modelProviderConfigService;
     private final ObjectMapper objectMapper;
+    private final ProviderWebClientFactory webClientFactory;
 
     public LlmProviderRouter(AiProperties aiProperties,
                              RateLimitService rateLimitService,
                              UsageQuotaService usageQuotaService,
                              ModelProviderConfigService modelProviderConfigService,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             ProviderWebClientFactory webClientFactory) {
         this.aiProperties = aiProperties;
         this.rateLimitService = rateLimitService;
         this.usageQuotaService = usageQuotaService;
         this.modelProviderConfigService = modelProviderConfigService;
         this.objectMapper = objectMapper;
+        this.webClientFactory = webClientFactory;
     }
 
     public List<Map<String, Object>> buildReActMessages(String userMessage,
@@ -165,12 +169,9 @@ public class LlmProviderRouter {
     }
 
     private WebClient buildClient(ModelProviderConfigService.ActiveProviderView provider) {
-        WebClient.Builder builder = WebClient.builder()
-                .baseUrl(ModelProviderConfigService.normalizeOpenAiCompatibleBaseUrl(provider.apiBaseUrl()));
-        if (provider.apiKey() != null && !provider.apiKey().isBlank()) {
-            builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + provider.apiKey());
-        }
-        return builder.build();
+        return webClientFactory.getClient(
+                ModelProviderConfigService.normalizeOpenAiCompatibleBaseUrl(provider.apiBaseUrl()),
+                provider.apiKey());
     }
 
     private void logProviderError(String message, Throwable error) {

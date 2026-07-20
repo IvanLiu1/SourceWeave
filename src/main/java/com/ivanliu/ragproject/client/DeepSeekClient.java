@@ -36,6 +36,7 @@ public class DeepSeekClient {
     private final UsageQuotaService usageQuotaService;
     private final ModelProviderConfigService modelProviderConfigService;
     private final ObjectMapper objectMapper;
+    private final ProviderWebClientFactory webClientFactory;
     private static final Logger logger = LoggerFactory.getLogger(DeepSeekClient.class);
     
     public DeepSeekClient(@Value("${deepseek.api.url}") String apiUrl,
@@ -43,15 +44,10 @@ public class DeepSeekClient {
                          @Value("${deepseek.api.model}") String model,
                          AiProperties aiProperties,
                          UsageQuotaService usageQuotaService,
-                         ModelProviderConfigService modelProviderConfigService) {
-        WebClient.Builder builder = WebClient.builder().baseUrl(apiUrl);
-        
-        // 只有当 API key 不为空时才添加 Authorization header
-        if (apiKey != null && !apiKey.trim().isEmpty()) {
-            builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
-        }
-        
-        this.webClient = builder.build();
+                         ModelProviderConfigService modelProviderConfigService,
+                         ProviderWebClientFactory webClientFactory) {
+        this.webClientFactory = webClientFactory;
+        this.webClient = webClientFactory.getClient(apiUrl, apiKey != null ? apiKey.trim() : null);
         this.apiKey = apiKey;
         this.model = model;
         this.aiProperties = aiProperties;
@@ -191,12 +187,10 @@ public class DeepSeekClient {
         try {
             ModelProviderConfigService.ActiveProviderView provider =
                     modelProviderConfigService.getActiveProvider(ModelProviderConfigService.SCOPE_LLM);
-            WebClient.Builder builder = WebClient.builder()
-                    .baseUrl(ModelProviderConfigService.normalizeOpenAiCompatibleBaseUrl(provider.apiBaseUrl()));
-            if (provider.apiKey() != null && !provider.apiKey().isBlank()) {
-                builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + provider.apiKey());
-            }
-            return new SummaryEndpoint(builder.build(), provider.model(), provider.provider());
+            WebClient client = webClientFactory.getClient(
+                    ModelProviderConfigService.normalizeOpenAiCompatibleBaseUrl(provider.apiBaseUrl()),
+                    provider.apiKey());
+            return new SummaryEndpoint(client, provider.model(), provider.provider());
         } catch (Exception exception) {
             logger.warn("无法读取活动 LLM Provider，generate_summary 内部摘要回退到 deepseek.* 配置: {}", exception.getMessage());
             return new SummaryEndpoint(webClient, model, "deepseek");

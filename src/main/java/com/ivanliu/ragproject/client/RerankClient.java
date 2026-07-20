@@ -2,6 +2,7 @@ package com.ivanliu.ragproject.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,8 +46,21 @@ public class RerankClient {
 
     private final ObjectMapper objectMapper;
 
+    /** 启动时构建一次并复用，避免每次重排请求重建客户端、丢失连接池 */
+    private WebClient webClient;
+
     public RerankClient(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    @PostConstruct
+    void initWebClient() {
+        this.webClient = WebClient.builder()
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                // 候选块文本可能较大，放宽内存缓冲上限到 16MB
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
+                .build();
     }
 
     /**
@@ -85,7 +99,7 @@ public class RerankClient {
             body.put("input", input);
             body.put("parameters", parameters);
 
-            String response = buildClient().post()
+            String response = webClient.post()
                     .uri(apiUrl)
                     .bodyValue(body)
                     .retrieve()
@@ -101,15 +115,6 @@ public class RerankClient {
             logger.warn("重排调用异常，回退原始顺序: {}", e.getMessage());
             return null;
         }
-    }
-
-    private WebClient buildClient() {
-        return WebClient.builder()
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                // 候选块文本可能较大，放宽内存缓冲上限到 16MB
-                .codecs(c -> c.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
-                .build();
     }
 
     private List<RerankResult> parseResponse(String response) throws Exception {
