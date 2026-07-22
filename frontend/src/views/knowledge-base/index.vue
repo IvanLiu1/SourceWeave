@@ -402,7 +402,7 @@ function renderActualEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
   return <span class="text-xs text-stone-400">-</span>;
 }
 
-let vectorizationPollingTimer: ReturnType<typeof window.setTimeout> | null = null;
+let vectorizationPollingTimer: number | null = null;
 
 function clearVectorizationPolling() {
   if (vectorizationPollingTimer) {
