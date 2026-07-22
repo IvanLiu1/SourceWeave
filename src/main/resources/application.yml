@@ -75,6 +75,13 @@ jwt:
   # 必须是 Base64 编码字符串
   secret-key: ${JWT_SECRET_KEY:}
 
+model-provider:
+  security:
+    # 模型 Provider API key 的加密密钥，不配则兜底用 JWT_SECRET_KEY。
+    # 兜底写在这里而不是只靠 @Value 的默认值链：一旦该 property 存在（哪怕是空串），
+    # @Value 的 ${...:${jwt.secret-key:}} 就不会再回退，会直接拿到空串。
+    secret-key: ${MODEL_PROVIDER_SECRET_KEY:${JWT_SECRET_KEY:}}
+
 admin:
   bootstrap:
     # 仅用于首次引导创建管理员账号，创建成功后应关闭

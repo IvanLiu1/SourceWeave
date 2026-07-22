@@ -38,13 +38,6 @@ knowledge:
 jwt:
   secret-key: bXlfc2VjdXJlX2tleV8xMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc=
 
-# 显式提供模型配置加密密钥:secretCryptoService.init 要求 Base64 解码后为 16/24/32 字节,
-# 上面 jwt.secret-key 解码为 41 字节不合法。本地有 .env 的 JWT_SECRET_KEY(32 字节)覆盖故通过,
-# CI 无 .env 时必须靠这里,否则整个 Spring 上下文启动失败
-model-provider:
-  security:
-    secret-key: dGVzdC1vbmx5LW1vZGVsLXByb3ZpZGVyLWtleS0zMmI=
-
 minio:
   endpoint: http://localhost:9000
   accessKey: minioadmin
