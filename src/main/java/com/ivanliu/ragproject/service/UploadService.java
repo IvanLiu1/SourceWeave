@@ -1,13 +1,11 @@
 package com.ivanliu.ragproject.service;
 
 import org.springframework.beans.factory.annotation.Value;
-import com.ivanliu.ragproject.config.MinioConfig;
 import com.ivanliu.ragproject.exception.CustomException;
 import com.ivanliu.ragproject.model.ChunkInfo;
 import com.ivanliu.ragproject.model.FileUpload;
 import com.ivanliu.ragproject.repository.ChunkInfoRepository;
 import com.ivanliu.ragproject.repository.FileUploadRepository;
-import io.micrometer.common.util.StringUtils;
 import io.minio.*;
 import io.minio.http.Method;
 import io.minio.GetObjectResponse;
@@ -15,6 +13,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -26,7 +25,6 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -48,6 +46,11 @@ public class UploadService {
     @Autowired
     private MinioClient minioClient;
 
+    // 生成给浏览器直接访问的预签名 URL，必须用 publicUrl 签名，见 MinioConfig#presignedMinioClient
+    @Autowired
+    @Qualifier("presignedMinioClient")
+    private MinioClient presignedMinioClient;
+
     // 用于操作文件上传记录的 Repository
     @Autowired
     private FileUploadRepository fileUploadRepository;
@@ -55,9 +58,6 @@ public class UploadService {
     // 用于操作分片信息的 Repository
     @Autowired
     private ChunkInfoRepository chunkInfoRepository;
-
-    @Autowired
-    private MinioConfig minioConfig;
 
     /**
      * 上传文件分片
@@ -651,7 +651,7 @@ public class UploadService {
     }
 
     public String generateMergedObjectUrl(String fileMd5) throws Exception {
-        return minioClient.getPresignedObjectUrl(
+        return presignedMinioClient.getPresignedObjectUrl(
                 GetPresignedObjectUrlArgs.builder()
                         .method(Method.GET)
                         .bucket(minioBucket)
@@ -659,18 +659,6 @@ public class UploadService {
                         .expiry(1, TimeUnit.HOURS)
                         .build()
         );
-    }
-
-    /**
-     * 转换为公开 URL
-     * @param minioUrl
-     * @return
-     */
-    public String transToPublicUrl(String minioUrl) {
-        if (StringUtils.isBlank(minioUrl) || Objects.equals(minioConfig.getEndpoint(), minioConfig.getPublicUrl())) {
-            return minioUrl;
-        }
-        return minioUrl.replaceFirst(minioConfig.getEndpoint(), minioConfig.getPublicUrl());
     }
 
     private FileUpload getOrCreateFileUpload(String fileMd5,

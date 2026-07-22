@@ -18,6 +18,7 @@ import org.apache.tika.exception.TikaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +67,11 @@ public class DocumentService {
 
     @Autowired
     private MinioClient minioClient;
+
+    // 生成给浏览器直接访问的预签名 URL，必须用 publicUrl 签名，见 MinioConfig#presignedMinioClient
+    @Autowired
+    @Qualifier("presignedMinioClient")
+    private MinioClient presignedMinioClient;
 
     @Autowired
     private ElasticsearchService elasticsearchService;
@@ -483,7 +489,7 @@ public class DocumentService {
 
             try {
                 // 尝试使用新路径（MD5）
-                String presignedUrl = minioClient.getPresignedObjectUrl(
+                String presignedUrl = presignedMinioClient.getPresignedObjectUrl(
                         GetPresignedObjectUrlArgs.builder()
                                 .method(Method.GET)
                                 .bucket(minioBucket)
@@ -494,14 +500,12 @@ public class DocumentService {
                 logger.info("成功生成文件下载链接（新路径）: fileMd5={}, fileName={}, objectName={}",
                         fileMd5, fileUpload.getFileName(), objectName);
 
-                // 使用 publicUrl 公开域名来替换原始域名
-                presignedUrl = uploadService.transToPublicUrl(presignedUrl);
                 return presignedUrl;
             } catch (Exception e) {
                 logger.warn("使用新路径生成下载链接失败，尝试使用旧路径（文件名）: fileMd5={}", fileMd5);
                 // 降级：尝试使用旧的文件名路径（兼容旧数据）
                 String oldObjectName = "merged/" + fileUpload.getFileName();
-                String presignedUrl = minioClient.getPresignedObjectUrl(
+                String presignedUrl = presignedMinioClient.getPresignedObjectUrl(
                         GetPresignedObjectUrlArgs.builder()
                                 .method(Method.GET)
                                 .bucket(minioBucket)
@@ -511,7 +515,6 @@ public class DocumentService {
                 );
                 logger.info("成功生成文件下载链接（旧路径）: fileMd5={}, fileName={}, objectName={}",
                         fileMd5, fileUpload.getFileName(), oldObjectName);
-                presignedUrl = uploadService.transToPublicUrl(presignedUrl);
                 return presignedUrl;
             }
         } catch (Exception e) {

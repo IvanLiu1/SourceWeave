@@ -1,6 +1,5 @@
 package com.ivanliu.ragproject.service;
 
-import com.ivanliu.ragproject.config.MinioConfig;
 import com.ivanliu.ragproject.exception.CustomException;
 import com.ivanliu.ragproject.model.ChunkInfo;
 import com.ivanliu.ragproject.model.FileUpload;
@@ -46,7 +45,7 @@ class UploadServiceTest {
     private ChunkInfoRepository chunkInfoRepository;
 
     @Mock
-    private MinioConfig minioConfig;
+    private MinioClient presignedMinioClient;
 
     private UploadService uploadService;
 
@@ -58,7 +57,7 @@ class UploadServiceTest {
         ReflectionTestUtils.setField(uploadService, "minioClient", minioClient);
         ReflectionTestUtils.setField(uploadService, "fileUploadRepository", fileUploadRepository);
         ReflectionTestUtils.setField(uploadService, "chunkInfoRepository", chunkInfoRepository);
-        ReflectionTestUtils.setField(uploadService, "minioConfig", minioConfig);
+        ReflectionTestUtils.setField(uploadService, "presignedMinioClient", presignedMinioClient);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
