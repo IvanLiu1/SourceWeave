@@ -51,8 +51,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: pnpm typecheck
-
+      # 先 build:auto-imports.d.ts / components.d.ts 是 vite 插件生成物且被 gitignore,
+      # 全新 checkout 里不存在,typecheck 必须在 build 生成它们之后跑
       - name: Build
         run: pnpm build
+
+      - name: Type check
+        run: pnpm typecheck
