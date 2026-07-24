@@ -113,9 +113,11 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { NButton, NSpin } from 'naive-ui';
 import { getAuthorization } from '@/service/request/shared';
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// 走自定义 worker 入口:它先安装 Map.prototype.getOrInsertComputed polyfill 再加载官方
+// worker,使 pdf.js 5.x 在未原生支持该方法的浏览器上也能渲染。见 @/plugins/pdf-worker
+import workerUrl from '@/plugins/pdf-worker?worker&url';
 
-GlobalWorkerOptions.workerSrc = workerSrc;
+GlobalWorkerOptions.workerSrc = workerUrl;
 
 interface Props {
   url: string;

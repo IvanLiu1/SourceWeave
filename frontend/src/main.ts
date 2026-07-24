@@ -1,3 +1,4 @@
+import './plugins/polyfills';
 import 'vue-markdown-shiki/style';
 import markdownPlugin from '@/vendor/vue-markdown-shiki';
 import './plugins/assets';
