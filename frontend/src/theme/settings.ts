@@ -10,7 +10,7 @@ export const themeSettings: App.Theme.ThemeSetting = {
   resetCacheStrategy: 'close',
   layout: { mode: 'vertical', scrollMode: 'content', reverseHorizontalMix: false },
   page: { animate: true, animateMode: 'fade-slide' },
-  header: { height: 56, breadcrumb: { visible: false, showIcon: true }, multilingual: { visible: false } },
+  header: { height: 56, breadcrumb: { visible: false, showIcon: true }, multilingual: { visible: true } },
   tab: { visible: false, cache: true, height: 44, mode: 'chrome' },
   fixedHeaderAndTab: true,
   sider: {
