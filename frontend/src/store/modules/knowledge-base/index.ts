@@ -1,9 +1,11 @@
+import { $t } from '@/locales';
 import { REQUEST_ID_KEY } from '~/packages/axios/src';
 import { nanoid } from '~/packages/utils/src';
 
 const maxConcurrentChunksPerFile = 4;
 
 export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () => {
+  const appStore = useAppStore();
   const tasks = ref<Api.KnowledgeBase.UploadTask[]>([]);
   const activeUploads = ref<Set<string>>(new Set());
 
@@ -102,9 +104,11 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
       tasks.value[index].actualChunkCount = undefined;
 
       if (data?.estimatedEmbeddingTokens) {
-        const tokenLabel = Number(data.estimatedEmbeddingTokens).toLocaleString();
-        const chunkLabel = Number(data.estimatedChunkCount || 0).toLocaleString();
-        window.$message?.success(`上传完成，预计向量化消耗 ${tokenLabel} Tokens（${chunkLabel} 个切片）`);
+        const tokenLabel = Number(data.estimatedEmbeddingTokens).toLocaleString(appStore.locale);
+        const chunkLabel = Number(data.estimatedChunkCount || 0).toLocaleString(appStore.locale);
+        window.$message?.success(
+          $t('page.knowledgeBase.upload.completeEstimate', { tokens: tokenLabel, chunks: chunkLabel })
+        );
       }
       return true;
     } catch {
@@ -131,10 +135,10 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
     if (existingTask) {
       // 如果存在相同文件，直接返回该上传任务
       if (existingTask.status === UploadStatus.Completed) {
-        window.$message?.error('文件已存在');
+        window.$message?.error($t('page.knowledgeBase.upload.fileExists'));
         return;
       } else if (existingTask.status === UploadStatus.Pending || existingTask.status === UploadStatus.Uploading) {
-        window.$message?.error('文件正在上传中');
+        window.$message?.error($t('page.knowledgeBase.upload.fileUploading'));
         return;
       } else if (existingTask.status === UploadStatus.Break) {
         existingTask.status = UploadStatus.Pending;

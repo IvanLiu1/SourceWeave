@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, h } from 'vue';
+import { computed, h, onMounted, ref } from 'vue';
 import { NTag } from 'naive-ui';
+import { $t } from '@/locales';
+
 const { userInfo } = storeToRefs(useAuthStore());
+const appStore = useAppStore();
+
+function formatNumber(value: number | null | undefined) {
+  return Number(value || 0).toLocaleString(appStore.locale);
+}
 
 const tags = ref<Api.OrgTag.Mine>({
   orgTags: [],
@@ -100,7 +107,7 @@ const setPrimaryOrg = async () => {
 };
 
 // Token 记录相关方法
-const getTokenRecords = async () => {
+async function getTokenRecords() {
   tokenRecordLoading.value = true;
   try {
     const { error, data } = await request({
@@ -120,7 +127,7 @@ const getTokenRecords = async () => {
   } finally {
     tokenRecordLoading.value = false;
   }
-};
+}
 
 const handlePageChange = (page: number) => {
   pagination.value.page = page;
@@ -130,13 +137,13 @@ const handlePageChange = (page: number) => {
 // Token 记录表格列定义
 const tokenRecordColumns = computed(() => [
   {
-    title: '日期',
+    title: $t('page.personalCenter.column.date'),
     key: 'recordDate',
     width: 100,
     render: (row: Api.User.TokenRecord) => row.recordDate
   },
   {
-    title: 'Token 类型',
+    title: $t('page.personalCenter.column.tokenType'),
     key: 'tokenType',
     width: 100,
     render: (row: Api.User.TokenRecord) => {
@@ -149,57 +156,59 @@ const tokenRecordColumns = computed(() => [
     }
   },
   {
-    title: '变动类型',
+    title: $t('page.personalCenter.column.changeType'),
     key: 'changeType',
     width: 100,
     render: (row: Api.User.TokenRecord) => {
       const typeMap: Record<string, { text: string; type: any }> = {
-        INCREASE: { text: '充值', type: 'success' },
-        CONSUME: { text: '消耗', type: 'warning' }
+        INCREASE: { text: $t('page.personalCenter.increase'), type: 'success' },
+        CONSUME: { text: $t('page.personalCenter.consume'), type: 'warning' }
       };
       const type = typeMap[row.changeType] || { text: row.changeType, type: 'default' };
       return h(NTag, { type: type.type }, () => type.text);
     }
   },
   {
-    title: '变动数量',
+    title: $t('page.personalCenter.column.amount'),
     key: 'amount',
     width: 120,
     render: (row: Api.User.TokenRecord) => {
       const sign = row.changeType === 'INCREASE' ? '+' : '-';
-      return `${sign}${row.amount.toLocaleString()}`;
+      return `${sign}${formatNumber(row.amount)}`;
     }
   },
   {
-    title: '变动前余额',
+    title: $t('page.personalCenter.column.balanceBefore'),
     key: 'balanceBefore',
     width: 120,
-    render: (row: Api.User.TokenRecord) => row.balanceBefore?.toLocaleString() || '-'
+    render: (row: Api.User.TokenRecord) =>
+      row.balanceBefore === null || row.balanceBefore === undefined ? '-' : formatNumber(row.balanceBefore)
   },
   {
-    title: '变动后余额',
+    title: $t('page.personalCenter.column.balanceAfter'),
     key: 'balanceAfter',
     width: 120,
-    render: (row: Api.User.TokenRecord) => row.balanceAfter?.toLocaleString() || '-'
+    render: (row: Api.User.TokenRecord) =>
+      row.balanceAfter === null || row.balanceAfter === undefined ? '-' : formatNumber(row.balanceAfter)
   },
   {
-    title: '原因',
+    title: $t('page.personalCenter.column.reason'),
     key: 'reason',
     minWidth: 100,
     ellipsis: { tooltip: true },
     render: (row: Api.User.TokenRecord) => row.reason || '-'
   },
   {
-    title: '请求次数',
+    title: $t('page.personalCenter.column.requestCount'),
     key: 'requestCount',
     width: 80,
-    render: (row: Api.User.TokenRecord) => row.requestCount?.toLocaleString() || '0'
+    render: (row: Api.User.TokenRecord) => formatNumber(row.requestCount)
   },
   {
-    title: '创建时间',
+    title: $t('page.personalCenter.column.createdAt'),
     key: 'createdAt',
     width: 180,
-    render: (row: Api.User.TokenRecord) => new Date(row.createdAt).toLocaleString('zh-CN')
+    render: (row: Api.User.TokenRecord) => new Date(row.createdAt).toLocaleString(appStore.locale)
   }
 ]);
 </script>
@@ -215,7 +224,9 @@ const tokenRecordColumns = computed(() => [
             </NAvatar>
             <div class="flex flex-col gap-1">
               <div>{{ userInfo.username }}</div>
-              <span class="text-xs text-stone-400">今日额度 · {{ usage.day || '未统计' }}</span>
+              <span class="text-xs text-stone-400">
+                {{ $t('page.personalCenter.todayQuota', { day: usage.day || $t('page.personalCenter.unreported') }) }}
+              </span>
             </div>
           </div>
         </template>
@@ -225,20 +236,20 @@ const tokenRecordColumns = computed(() => [
               <NCard size="small" embedded class="quota-card">
                 <div class="text-sm font-semibold text-stone-700">LLM Token</div>
                 <div v-if="usage.llm.enabled" class="mt-3 flex flex-col gap-2 text-sm text-stone-500">
-                  <div>已用 {{ usage.llm.usedTokens.toLocaleString() }} / {{ usage.llm.limitTokens.toLocaleString() }}</div>
-                  <div>剩余 {{ usage.llm.remainingTokens.toLocaleString() }}</div>
-                  <div>请求 {{ usage.llm.requestCount.toLocaleString() }} 次</div>
+                  <div>{{ $t('page.personalCenter.used', { used: formatNumber(usage.llm.usedTokens), limit: formatNumber(usage.llm.limitTokens) }) }}</div>
+                  <div>{{ $t('page.personalCenter.remaining', { remaining: formatNumber(usage.llm.remainingTokens) }) }}</div>
+                  <div>{{ $t('page.personalCenter.requests', { count: formatNumber(usage.llm.requestCount) }) }}</div>
                 </div>
-                <div v-else class="mt-3 text-sm text-stone-400">当前未启用配额</div>
+                <div v-else class="mt-3 text-sm text-stone-400">{{ $t('page.personalCenter.quotaDisabled') }}</div>
               </NCard>
               <NCard size="small" embedded class="quota-card">
                 <div class="text-sm font-semibold text-stone-700">Embedding Token</div>
                 <div v-if="usage.embedding.enabled" class="mt-3 flex flex-col gap-2 text-sm text-stone-500">
-                  <div>已用 {{ usage.embedding.usedTokens.toLocaleString() }} / {{ usage.embedding.limitTokens.toLocaleString() }}</div>
-                  <div>剩余 {{ usage.embedding.remainingTokens.toLocaleString() }}</div>
-                  <div>请求 {{ usage.embedding.requestCount.toLocaleString() }} 次</div>
+                  <div>{{ $t('page.personalCenter.used', { used: formatNumber(usage.embedding.usedTokens), limit: formatNumber(usage.embedding.limitTokens) }) }}</div>
+                  <div>{{ $t('page.personalCenter.remaining', { remaining: formatNumber(usage.embedding.remainingTokens) }) }}</div>
+                  <div>{{ $t('page.personalCenter.requests', { count: formatNumber(usage.embedding.requestCount) }) }}</div>
                 </div>
-                <div v-else class="mt-3 text-sm text-stone-400">当前未启用配额</div>
+                <div v-else class="mt-3 text-sm text-stone-400">{{ $t('page.personalCenter.quotaDisabled') }}</div>
               </NCard>
             </div>
 
@@ -256,7 +267,7 @@ const tokenRecordColumns = computed(() => [
               <div class="flex items-center justify-between">
                 <div>{{ tag.name }}</div>
                 <NTag v-if="tag.tagId === tags.primaryOrg" type="primary" size="small">
-                  主标签
+                  {{ $t('page.personalCenter.primaryTag') }}
                   <template #icon>
                     <icon-solar:verified-check-bold-duotone class="text-icon" />
                   </template>
@@ -271,7 +282,7 @@ const tokenRecordColumns = computed(() => [
         </NScrollbar>
         <template #footer>
           <div class="flex flex-col gap-4">
-            <NDivider>Token 变动记录</NDivider>
+            <NDivider>{{ $t('page.personalCenter.records') }}</NDivider>
             <NSpin :show="tokenRecordLoading">
               <NDataTable
                 v-if="tokenRecords.length > 0"
@@ -287,7 +298,7 @@ const tokenRecordColumns = computed(() => [
                 :scroll-x="1200"
                 size="small"
               />
-              <NEmpty v-else description="暂无记录" />
+              <NEmpty v-else :description="$t('page.personalCenter.noRecords')" />
             </NSpin>
           </div>
         </template>
@@ -297,10 +308,10 @@ const tokenRecordColumns = computed(() => [
         v-model:show="visible"
         :loading="submitLoading"
         preset="dialog"
-        title="设置主标签"
-        content="确定将当前标签设置为主标签吗？"
-        positive-text="确认"
-        negative-text="取消"
+        :title="$t('page.personalCenter.setPrimary')"
+        :content="$t('page.personalCenter.setPrimaryConfirm')"
+        :positive-text="$t('common.confirm')"
+        :negative-text="$t('common.cancel')"
         @positive-click="setPrimaryOrg"
         @negative-click="visible = false"
       />

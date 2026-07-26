@@ -47,7 +47,7 @@ function onUpdate(
 <template>
   <NCascader
     v-model:value="model"
-    placeholder="请选择组织标签"
+    :placeholder="$t('component.orgTagCascader.placeholder')"
     :options="opts"
     value-field="tagId"
     label-field="name"

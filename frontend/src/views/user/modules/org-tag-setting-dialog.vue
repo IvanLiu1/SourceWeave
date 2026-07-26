@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FormRules } from 'naive-ui';
+import { $t } from '@/locales';
 
 defineOptions({
   name: 'OrgTagSettingDialog'
@@ -54,7 +55,7 @@ async function handleSubmit() {
     data: model.value
   });
   if (!res.error) {
-    window.$message?.success('操作成功');
+    window.$message?.success($t('page.orgTag.operationSuccess'));
     close();
     emit('submitted');
   }
@@ -73,24 +74,24 @@ watch(visible, () => {
   <NModal
     v-model:show="visible"
     preset="dialog"
-    title="组织标签设置"
+    :title="$t('page.user.orgDialog.title')"
     :show-icon="false"
     :mask-closable="false"
     class="w-500px!"
     @positive-click="handleSubmit"
   >
     <NForm ref="formRef" :model="model" :rules="rules" label-placement="left" :label-width="100" mt-10>
-      <NFormItem label="用户名" path="username">
+      <NFormItem :label="$t('page.user.orgDialog.username')" path="username">
         <NInput :value="rowData.username" readonly />
       </NFormItem>
-      <NFormItem label="组织标签" path="orgTags">
+      <NFormItem :label="$t('page.user.orgDialog.orgTags')" path="orgTags">
         <OrgTagCascader v-model:value="model.orgTags" multiple exclude-private />
       </NFormItem>
     </NForm>
     <template #action>
       <NSpace :size="16">
-        <NButton @click="close">取消</NButton>
-        <NButton type="primary" @click="handleSubmit">保存</NButton>
+        <NButton @click="close">{{ $t('common.cancel') }}</NButton>
+        <NButton type="primary" @click="handleSubmit">{{ $t('common.save') }}</NButton>
       </NSpace>
     </template>
   </NModal>

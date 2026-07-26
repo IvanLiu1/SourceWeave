@@ -96,7 +96,7 @@ export async function calculateMD5(file: File): Promise<string> {
       loadNext();
     };
 
-    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.onerror = () => reject(new Error($t('common.fileReadFailed')));
     loadNext();
   });
 }

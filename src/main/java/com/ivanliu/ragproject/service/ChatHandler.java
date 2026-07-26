@@ -104,6 +104,10 @@ public class ChatHandler {
     }
 
     public void processMessage(String userId, String userMessage, WebSocketSession session) {
+        processMessage(userId, userMessage, "zh-CN", session);
+    }
+
+    public void processMessage(String userId, String userMessage, String locale, WebSocketSession session) {
         logger.info("开始处理消息，用户ID: {}, 会话ID: {}", userId, session.getId());
         String conversationId = null;
         String generationId = null;
@@ -134,7 +138,7 @@ public class ChatHandler {
             // 3. 异步执行 ReAct 决策循环：模型按需返回 tool_calls，避免在 WebSocket 处理线程上阻塞 90s+ 的工具流
             try {
                 chatMonitorExecutor.execute(() ->
-                        runReActLoopSafely(userId, userMessage, finalConversationId, finalGenerationId, history, responseFuture));
+                        runReActLoopSafely(userId, userMessage, locale, finalConversationId, finalGenerationId, history, responseFuture));
             } catch (RejectedExecutionException ex) {
                 logger.warn("聊天处理线程池已满，generationId: {}", finalGenerationId);
                 RuntimeException busyException = new RuntimeException("系统繁忙，请稍后重试");
@@ -158,12 +162,13 @@ public class ChatHandler {
 
     private void runReActLoopSafely(String userId,
                                     String userMessage,
+                                    String locale,
                                     String conversationId,
                                     String generationId,
                                     List<Map<String, String>> history,
                                     CompletableFuture<String> responseFuture) {
         try {
-            runReActLoop(userId, userMessage, conversationId, generationId, history, responseFuture);
+            runReActLoop(userId, userMessage, locale, conversationId, generationId, history, responseFuture);
         } catch (Exception e) {
             logger.error("ReAct 循环执行失败: generationId={}", generationId, e);
             chatGenerationStateService.markFailed(generationId, e.getMessage());
@@ -175,6 +180,7 @@ public class ChatHandler {
 
     private void runReActLoop(String userId,
                               String userMessage,
+                              String locale,
                               String conversationId,
                               String generationId,
                               List<Map<String, String>> history,
@@ -183,7 +189,8 @@ public class ChatHandler {
                 userMessage,
                 "",
                 history,
-                buildRecentFeedbackGuidance(userId)
+                buildRecentFeedbackGuidance(userId),
+                locale
         );
         int executedToolCalls = 0;
         int totalPromptTokens = 0;

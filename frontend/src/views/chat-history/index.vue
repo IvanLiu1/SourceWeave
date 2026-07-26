@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { NScrollbar } from 'naive-ui';
 import { VueMarkdownItProvider } from '@/vendor/vue-markdown-shiki';
+import { $t } from '@/locales';
 import ChatMessage from '../chat/modules/chat-message.vue';
 
 defineOptions({
@@ -68,7 +69,7 @@ async function getList() {
     <Teleport defer to="#header-extra">
       <div class="px-10">
         <NForm :model="params" label-placement="left" :show-feedback="false" inline>
-          <NFormItem label="用户">
+          <NFormItem :label="$t('page.chatHistory.user')">
             <TheSelect
               v-model:value="userId"
               url="admin/users/list"
@@ -77,10 +78,10 @@ async function getList() {
               value-field="userId"
               label-field="username"
               class="clear w-200px!"
-              placeholder="全部用户"
+              :placeholder="$t('page.chatHistory.allUsers')"
             />
           </NFormItem>
-          <NFormItem label="时间">
+          <NFormItem :label="$t('page.chatHistory.time')">
             <NDatePicker v-model:value="range" type="daterange" class="clear" clearable />
           </NFormItem>
         </NForm>
@@ -91,7 +92,7 @@ async function getList() {
         <VueMarkdownItProvider>
           <ChatMessage v-for="(item, index) in list" :key="index" :msg="item" />
         </VueMarkdownItProvider>
-        <NEmpty v-if="!list.length" description="暂无数据" class="mt-60" />
+        <NEmpty v-if="!list.length" :description="$t('common.noData')" class="mt-60" />
       </NSpin>
     </NScrollbar>
   </div>

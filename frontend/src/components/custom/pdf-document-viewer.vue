@@ -2,13 +2,21 @@
   <div class="pdf-viewer-shell">
     <div v-if="!embeddedHeader" class="pdf-viewer-toolbar">
       <div class="toolbar-copy">
-        <span class="viewer-badge">{{ singlePagePreviewActive ? '单页定位' : 'PDF 预览' }}</span>
+        <span class="viewer-badge">
+          {{
+            singlePagePreviewActive ? $t('component.pdfViewer.singlePage') : $t('component.pdfViewer.preview')
+          }}
+        </span>
         <span class="viewer-kicker">{{ viewerKicker }}</span>
       </div>
       <div class="toolbar-actions">
         <span class="toolbar-chip">
-          <template v-if="singlePagePreviewActive">第 {{ displayCurrentPage }} 页</template>
-          <template v-else>第 {{ displayCurrentPage }} / {{ totalPages || 1 }} 页</template>
+          <template v-if="singlePagePreviewActive">
+            {{ $t('component.pdfViewer.page', { current: displayCurrentPage }) }}
+          </template>
+          <template v-else>
+            {{ $t('component.pdfViewer.pageTotal', { current: displayCurrentPage, total: totalPages || 1 }) }}
+          </template>
         </span>
         <span class="toolbar-chip">{{ Math.round(zoom * 100) }}%</span>
         <template v-if="!singlePagePreviewActive">
@@ -33,12 +41,12 @@
             <icon-mdi-magnify-plus-outline />
           </template>
         </NButton>
-        <NButton size="tiny" secondary @click="resetZoom">适应宽度</NButton>
+        <NButton size="tiny" secondary @click="resetZoom">{{ $t('component.pdfViewer.fitWidth') }}</NButton>
         <NButton size="tiny" secondary @click="openInNewTab">
           <template #icon>
             <icon-mdi-open-in-new />
           </template>
-          新窗口
+          {{ $t('component.pdfViewer.newWindow') }}
         </NButton>
       </div>
     </div>
@@ -57,14 +65,16 @@
           @click="goToPage(page.pageNumber)"
         >
           <span class="page-nav-number">P{{ displayPageNumber(page.pageNumber) }}</span>
-          <span class="page-nav-summary">{{ page.summary || `第 ${page.pageNumber} 页` }}</span>
+          <span class="page-nav-summary">
+            {{ page.summary || $t('component.pdfViewer.page', { current: page.pageNumber }) }}
+          </span>
         </button>
       </aside>
 
       <div ref="stageRef" class="page-stage">
         <div v-if="documentLoading" class="stage-feedback">
           <NSpin size="large" />
-          <span>正在加载 PDF 文档</span>
+          <span>{{ $t('component.pdfViewer.loading') }}</span>
         </div>
         <div v-else-if="renderError" class="stage-feedback is-error">
           <icon-mdi-alert-circle class="text-24" />
@@ -72,10 +82,10 @@
         </div>
         <div v-else class="page-scroll-shell">
           <div v-if="!singlePagePreviewActive && !embeddedHeader" class="page-meta-row">
-            <span>第 {{ displayCurrentPage }} 页</span>
-            <span v-if="currentPage === targetPageNumber">引用定位页</span>
-            <span v-else-if="highlightCount > 0">已匹配到相关文本</span>
-            <span v-else>浏览当前页</span>
+            <span>{{ $t('component.pdfViewer.page', { current: displayCurrentPage }) }}</span>
+            <span v-if="currentPage === targetPageNumber">{{ $t('component.pdfViewer.targetPage') }}</span>
+            <span v-else-if="highlightCount > 0">{{ $t('component.pdfViewer.matched') }}</span>
+            <span v-else>{{ $t('component.pdfViewer.browsing') }}</span>
           </div>
 
           <div ref="pageShellRef" class="pdf-page-shell">
@@ -96,7 +106,7 @@
             <div ref="textLayerRef" class="pdf-text-layer textLayer" />
             <div v-if="pageRendering" class="page-loading-mask">
               <NSpin size="small" />
-              <span>正在渲染页面</span>
+              <span>{{ $t('component.pdfViewer.rendering') }}</span>
             </div>
           </div>
         </div>
@@ -108,14 +118,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, watchEffect } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
+import { NButton, NSpin } from 'naive-ui';
 import { GlobalWorkerOptions, TextLayer, getDocument } from 'pdfjs-dist';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { NButton, NSpin } from 'naive-ui';
-import { getAuthorization } from '@/service/request/shared';
 // 走自定义 worker 入口:它先安装 Map.prototype.getOrInsertComputed polyfill 再加载官方
 // worker,使 pdf.js 5.x 在未原生支持该方法的浏览器上也能渲染。见 @/plugins/pdf-worker
 import workerUrl from '@/plugins/pdf-worker?worker&url';
+import { getAuthorization } from '@/service/request/shared';
+import { $t } from '@/locales';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -198,9 +209,9 @@ const matchCandidates = computed(() => buildMatchCandidates(props.searchText || 
 const singlePagePreviewActive = computed(() => Boolean(props.singlePageMode && props.sourcePageNumber));
 const viewerKicker = computed(() => {
   if (singlePagePreviewActive.value) {
-    return '当前是定位页快照，支持缩放；整本文档请点“新窗口”查看。';
+    return $t('component.pdfViewer.singlePageHint');
   }
-  return '支持翻页、缩放和新窗口查看原文件。';
+  return $t('component.pdfViewer.previewHint');
 });
 const displayCurrentPage = computed(() => {
   if (singlePagePreviewActive.value) {
@@ -210,11 +221,16 @@ const displayCurrentPage = computed(() => {
 });
 const embeddedHeader = computed(() => Boolean(props.embeddedHeader));
 const toolbarState = computed(() => ({
-  modeLabel: singlePagePreviewActive.value ? '单页定位' : 'PDF 预览',
+  modeLabel: singlePagePreviewActive.value
+    ? $t('component.pdfViewer.singlePage')
+    : $t('component.pdfViewer.preview'),
   helperText: viewerKicker.value,
   pageLabel: singlePagePreviewActive.value
-    ? `第 ${displayCurrentPage.value} 页`
-    : `第 ${displayCurrentPage.value} / ${totalPages.value || 1} 页`,
+    ? $t('component.pdfViewer.page', { current: displayCurrentPage.value })
+    : $t('component.pdfViewer.pageTotal', {
+        current: displayCurrentPage.value,
+        total: totalPages.value || 1
+      }),
   zoomLabel: `${Math.round(zoom.value * 100)}%`,
   singlePage: singlePagePreviewActive.value,
   canPrev: currentPage.value > 1,
@@ -359,7 +375,10 @@ function buildMatchCandidates(value: string | string[]) {
     }
 
     // 移除引文标记后再分割，使用更智能的分段逻辑
-    const withoutCitations = normalizedSource.replace(/(?:\(|（)?来源#\d+:[^)）;；。！？!?]*/g, ' ');
+    const withoutCitations = normalizedSource.replace(
+      /(?:\(|（)?(?:来源|Source)\s*#\d+:[^)）;；。！？!?]*/gi,
+      ' '
+    );
     // 按句号、问号、感叹号分割，保留冒号用于连接
     const segments = withoutCitations
       .split(/[；;，,。！？!?、\n\r]/)
@@ -391,10 +410,6 @@ function summarizeText(value: string) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function buildFallbackSummary(pageNumber: number) {
-  return `第 ${pageNumber} 页`;
-}
-
 function buildSummaryFromItems(items: unknown[]) {
   return summarizeText(
     items
@@ -408,7 +423,7 @@ function updatePageSummary(pageNumber: number, items?: unknown[]) {
   const summary = items ? buildSummaryFromItems(items) : '';
   pageSummaries.value[pageNumber - 1] = {
     pageNumber,
-    summary: summary || buildFallbackSummary(pageNumber)
+    summary
   };
   summaryLoadedPages.add(pageNumber);
 }
@@ -498,7 +513,7 @@ async function loadQueuedSummaries() {
     } catch (error) {
       pageSummaries.value[pageNumber - 1] = {
         pageNumber,
-        summary: buildFallbackSummary(pageNumber)
+        summary: ''
       };
       summaryLoadedPages.add(pageNumber);
     } finally {
@@ -596,7 +611,7 @@ async function loadDocument(url: string) {
     currentPage.value = targetPageNumber.value;
     pageSummaries.value = Array.from({ length: documentProxy.numPages }, (_, index) => ({
       pageNumber: index + 1,
-      summary: buildFallbackSummary(index + 1)
+      summary: ''
     }));
     summaryLoadedPages = new Set();
     summaryLoadingPages = new Set();
@@ -613,7 +628,7 @@ async function loadDocument(url: string) {
   } catch (error) {
     if (currentToken !== lifecycleToken) return;
     console.error('[PDF 预览] 加载失败:', error);
-    renderError.value = 'PDF 加载失败，请尝试新窗口打开或重新预览。';
+    renderError.value = $t('component.pdfViewer.loadFailed');
   } finally {
     if (currentToken === lifecycleToken) {
       documentLoading.value = false;
@@ -724,7 +739,7 @@ async function renderCurrentPage(expectedToken = lifecycleToken, renderVersion =
 
     const context = canvas.getContext('2d', { alpha: false });
     if (!context) {
-      renderError.value = '无法初始化 PDF 画布。';
+      renderError.value = $t('component.pdfViewer.canvasFailed');
       return;
     }
 
@@ -772,7 +787,7 @@ async function renderCurrentPage(expectedToken = lifecycleToken, renderVersion =
       return;
     }
     console.error('[PDF 预览] 页面渲染失败:', error);
-    renderError.value = 'PDF 页面渲染失败，请稍后重试。';
+    renderError.value = $t('component.pdfViewer.renderFailed');
   }
 }
 

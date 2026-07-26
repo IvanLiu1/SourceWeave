@@ -1,17 +1,20 @@
 <script setup lang="ts">
+import { $t } from '@/locales';
+
 const chatStore = useChatStore();
+const appStore = useAppStore();
 const { connectionStatus, input, isRateLimited, list, rateLimitRemainingSeconds, wsData } = storeToRefs(chatStore);
 
 function buildWsErrorMessage(data: Record<string, any>) {
   if (data.code === 429) {
     const retryAfterSeconds = Number(data.retryAfterSeconds || 0);
-    const baseMessage = data.message || '聊天请求过于频繁';
+    const baseMessage = data.message || $t('page.chat.input.rateLimitDefault');
 
     if (retryAfterSeconds > 0) {
-      return `${baseMessage}，请在 ${retryAfterSeconds} 秒后重试`;
+      return $t('page.chat.input.retryAfter', { message: baseMessage, seconds: retryAfterSeconds });
     }
 
-    return `${baseMessage}，请稍后再试`;
+    return $t('page.chat.input.retryLater', { message: baseMessage });
   }
 
   if (typeof data.error === 'string' && data.error.trim()) {
@@ -22,7 +25,7 @@ function buildWsErrorMessage(data: Record<string, any>) {
     return data.message.trim();
   }
 
-  return '服务器繁忙，请稍后再试';
+  return $t('page.chat.input.serverBusy');
 }
 
 const latestMessage = computed(() => {
@@ -51,22 +54,22 @@ const sendDisabled = computed(() => {
 
 const connectionText = computed(() => {
   if (connectionStatus.value === 'OPEN') {
-    return '已连接';
+    return $t('page.chat.input.connected');
   }
   if (connectionStatus.value === 'RECONNECTING') {
-    return '重连中';
+    return $t('page.chat.input.reconnecting');
   }
   if (connectionStatus.value === 'CONNECTING') {
-    return '连接中';
+    return $t('page.chat.input.connecting');
   }
-  return '未连接';
+  return $t('page.chat.input.disconnected');
 });
 
 const cooldownText = computed(() => {
   if (!isRateLimited.value) {
     return '';
   }
-  return `${rateLimitRemainingSeconds} 秒后可重新发送`;
+  return $t('page.chat.input.cooldown', { seconds: rateLimitRemainingSeconds.value });
 });
 
 function findAssistantMessage(generationId?: string) {
@@ -306,7 +309,7 @@ watch(wsData, val => {
 
 const handleSend = async () => {
   if (isRateLimited.value) {
-    window.$message?.warning(`当前发送受限，${cooldownText.value}`);
+    window.$message?.warning($t('page.chat.input.rateLimited', { cooldown: cooldownText.value }));
     return;
   }
 
@@ -339,7 +342,12 @@ const handleSend = async () => {
     status: 'pending',
     toolEvents: []
   });
-  chatStore.wsSend(input.value.message);
+  const payload: Api.Chat.SendPayload = {
+    type: 'chat',
+    message: input.value.message,
+    locale: appStore.locale
+  };
+  chatStore.wsSend(JSON.stringify(payload));
   input.value.message = '';
   startGenerationStatusMonitor();
 };
@@ -385,7 +393,7 @@ onUnmounted(() => {
       <textarea
         ref="inputRef"
         v-model.trim="input.message"
-        placeholder="给 RAG知识库 发送消息，Enter 发送，Shift+Enter 换行"
+        :placeholder="$t('page.chat.input.placeholder')"
         class="max-h-32 min-h-6 w-full flex-1 resize-none border-none bg-transparent py-1 text-14px color-#333 caret-[rgb(var(--primary-color))] outline-none placeholder:text-#bbb dark:color-#e1e1e1 dark:placeholder:text-#555"
         @keydown="handShortcut"
       />
@@ -420,7 +428,7 @@ onUnmounted(() => {
           {{ cooldownText }}
         </span>
       </div>
-      <span class="text-11px color-#bbb">Shift+Enter 换行</span>
+      <span class="text-11px color-#bbb">{{ $t('page.chat.input.newlineHint') }}</span>
     </div>
   </div>
 </template>

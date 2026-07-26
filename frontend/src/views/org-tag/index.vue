@@ -1,6 +1,7 @@
 <script setup lang="tsx">
 import { NButton, NPopconfirm } from 'naive-ui';
 import { fetchGetOrgTagList } from '@/service/api/org-tag';
+import { $t } from '@/locales';
 import OrgTagOperateDialog from './modules/org-tag-operate-dialog.vue';
 
 const appStore = useAppStore();
@@ -11,7 +12,7 @@ const { columns, columnChecks, data, loading, getData, mobilePagination } = useT
   columns: () => [
     {
       key: 'name',
-      title: '标签名称',
+      title: $t('page.orgTag.name'),
       width: 300,
       ellipsis: {
         tooltip: true
@@ -19,7 +20,7 @@ const { columns, columnChecks, data, loading, getData, mobilePagination } = useT
     },
     {
       key: 'description',
-      title: '描述',
+      title: $t('page.orgTag.description'),
       minWidth: 200,
       ellipsis: {
         tooltip: true
@@ -27,28 +28,28 @@ const { columns, columnChecks, data, loading, getData, mobilePagination } = useT
     },
     {
       key: 'uploadMaxSizeMb',
-      title: '非Admin上传上限',
+      title: $t('page.orgTag.uploadLimit'),
       width: 160,
-      render: row => (row.uploadMaxSizeMb ? `${row.uploadMaxSizeMb} MB` : '不限制')
+      render: row => (row.uploadMaxSizeMb ? `${row.uploadMaxSizeMb} MB` : $t('page.orgTag.unlimited'))
     },
     {
       key: 'operate',
-      title: '操作',
+      title: $t('page.orgTag.operation'),
       width: 240,
       render: row => (
         <div class="flex gap-2">
           <NButton type="success" ghost size="small" onClick={() => addChild(row)}>
-            新增下级
+            {$t('page.orgTag.addChild')}
           </NButton>
           <NButton type="primary" ghost size="small" onClick={() => edit(row)}>
-            编辑
+            {$t('common.edit')}
           </NButton>
           <NPopconfirm onPositiveClick={() => handleDelete(row.tagId!)}>
             {{
-              default: () => '确认删除当前标签吗？',
+              default: () => $t('page.orgTag.deleteConfirm'),
               trigger: () => (
                 <NButton type="error" ghost size="small">
-                  删除
+                  {$t('common.delete')}
                 </NButton>
               )
             }}
@@ -89,7 +90,7 @@ async function handleDelete(tagId: string) {
 
 <template>
   <div class="flex-col-stretch gap-16px overflow-hidden <sm:overflow-auto">
-    <NCard title="组织标签" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
+    <NCard :title="$t('page.orgTag.title')" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
       <template #header-extra>
         <TableHeaderOperation v-model:columns="columnChecks" :loading="loading" @add="handleAdd" @refresh="getData" />
       </template>

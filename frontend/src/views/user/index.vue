@@ -1,6 +1,7 @@
 <script setup lang="tsx">
 import { ref } from 'vue';
 import { NButton, NTag } from 'naive-ui';
+import { $t } from '@/locales';
 import UserSearch from './modules/user-search.vue';
 import OrgTagSettingDialog from './modules/org-tag-setting-dialog.vue';
 import TokenQuotaDialog from './modules/token-quota-dialog.vue';
@@ -22,17 +23,17 @@ const { columns, columnChecks, data, getData, loading, mobilePagination, searchP
   columns: () => [
     {
       key: 'index',
-      title: '序号',
+      title: $t('page.user.column.index'),
       width: 64
     },
     {
       key: 'username',
-      title: '用户名',
+      title: $t('page.user.column.username'),
       minWidth: 100
     },
     {
       key: 'orgTags',
-      title: '标签',
+      title: $t('page.user.column.tags'),
       render: row => (
         <div class="flex flex-wrap gap-2">
           {row.orgTags.map(tag => (
@@ -45,43 +46,50 @@ const { columns, columnChecks, data, getData, loading, mobilePagination, searchP
     },
     {
       key: 'status',
-      title: '是否启用',
+      title: $t('page.user.column.status'),
       width: 100,
-      render: row => <NTag type={row.status ? 'success' : 'warning'}>{row.status ? '已启用' : '已禁用'}</NTag>
+      render: row => (
+        <NTag type={row.status ? 'success' : 'warning'}>
+          {row.status ? $t('page.user.enabled') : $t('page.user.disabled')}
+        </NTag>
+      )
     },
     {
       key: 'createdAt',
-      title: '创建时间',
+      title: $t('page.user.column.createdAt'),
       width: 200,
       render: row => dayjs(row.createdAt).format('YYYY-MM-DD HH:mm:ss')
     },
     {
       key: 'chatUsage',
-      title: '聊天次数',
+      title: $t('page.user.column.chatCount'),
       width: 130,
       render: row => (
         <div class="flex flex-col gap-1 text-xs">
-          <span>{Number(row.usage?.chatRequestCount || 0).toLocaleString()} 次</span>
-          <span class="text-stone-400">今日消息数</span>
+          <span>{$t('page.user.count', { count: Number(row.usage?.chatRequestCount || 0).toLocaleString(appStore.locale) })}</span>
+          <span class="text-stone-400">{$t('page.user.todayMessages')}</span>
         </div>
       )
     },
     {
       key: 'llmUsage',
-      title: 'LLM额度',
+      title: $t('page.user.column.llmQuota'),
       width: 220,
       render: row => {
         const quota = row.usage?.llm;
         if (!quota?.enabled) {
-          return <span class="text-stone-400">未启用</span>;
+          return <span class="text-stone-400">{$t('page.user.quotaDisabled')}</span>;
         }
         return (
           <div class="flex flex-col gap-1 text-xs">
             <span>
-              {Number(quota.usedTokens || 0).toLocaleString()} / {Number(quota.limitTokens || 0).toLocaleString()}
+              {Number(quota.usedTokens || 0).toLocaleString(appStore.locale)} / {Number(quota.limitTokens || 0).toLocaleString(appStore.locale)}
             </span>
             <span class="text-stone-400">
-              剩余 {Number(quota.remainingTokens || 0).toLocaleString()} · {quota.requestCount} 次
+              {$t('page.user.remainingRequests', {
+                remaining: Number(quota.remainingTokens || 0).toLocaleString(appStore.locale),
+                count: Number(quota.requestCount || 0).toLocaleString(appStore.locale)
+              })}
             </span>
           </div>
         );
@@ -89,20 +97,23 @@ const { columns, columnChecks, data, getData, loading, mobilePagination, searchP
     },
     {
       key: 'embeddingUsage',
-      title: 'Embedding额度',
+      title: $t('page.user.column.embeddingQuota'),
       width: 220,
       render: row => {
         const quota = row.usage?.embedding;
         if (!quota?.enabled) {
-          return <span class="text-stone-400">未启用</span>;
+          return <span class="text-stone-400">{$t('page.user.quotaDisabled')}</span>;
         }
         return (
           <div class="flex flex-col gap-1 text-xs">
             <span>
-              {Number(quota.usedTokens || 0).toLocaleString()} / {Number(quota.limitTokens || 0).toLocaleString()}
+              {Number(quota.usedTokens || 0).toLocaleString(appStore.locale)} / {Number(quota.limitTokens || 0).toLocaleString(appStore.locale)}
             </span>
             <span class="text-stone-400">
-              剩余 {Number(quota.remainingTokens || 0).toLocaleString()} · {quota.requestCount} 次
+              {$t('page.user.remainingRequests', {
+                remaining: Number(quota.remainingTokens || 0).toLocaleString(appStore.locale),
+                count: Number(quota.requestCount || 0).toLocaleString(appStore.locale)
+              })}
             </span>
           </div>
         );
@@ -110,16 +121,16 @@ const { columns, columnChecks, data, getData, loading, mobilePagination, searchP
     },
     {
       key: 'operate',
-      title: '操作',
+      title: $t('page.user.column.operation'),
       width: 230,
       render: row => (
         <div class="flex gap-2">
           <NButton type="primary" ghost size="small" onClick={() => handleOrgTag(row)}>
-            分配组织标签
+            {$t('page.user.assignOrgTags')}
           </NButton>
           {authStore.isAdmin ? (
             <NButton type="warning" ghost size="small" onClick={() => handleTokenQuota(row)}>
-              追加 Token
+              {$t('page.user.addToken')}
             </NButton>
           ) : null}
         </div>
@@ -150,7 +161,7 @@ function handleTokenQuota(row: Api.User.Item) {
       <UserSearch v-model:model="searchParams" @reset="resetSearchParams" @search="getData" />
     </Teleport>
 
-    <NCard title="用户列表" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
+    <NCard :title="$t('page.user.title')" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
       <template #header-extra>
         <TableHeaderOperation v-model:columns="columnChecks" :addable="false" :loading="loading" @refresh="getData" />
       </template>

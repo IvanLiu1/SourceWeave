@@ -6,6 +6,7 @@ import { uploadAccept } from '@/constants/common';
 import { UploadStatus } from '@/enum';
 import SvgIcon from '@/components/custom/svg-icon.vue';
 import FilePreview from '@/components/custom/file-preview.vue';
+import { $t } from '@/locales';
 import UploadDialog from './modules/upload-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
 
@@ -78,7 +79,7 @@ const { columns, columnChecks, data, getData, loading, mobilePagination } = useT
   columns: () => [
     {
       key: 'fileName',
-      title: '文件名',
+      title: $t('page.knowledgeBase.column.fileName'),
       minWidth: 300,
       render: row => (
         <div class="flex items-center">
@@ -104,9 +105,9 @@ const { columns, columnChecks, data, getData, loading, mobilePagination } = useT
             class="cursor-pointer text-3 font-mono transition-colors hover:text-primary"
             onClick={() => {
               navigator.clipboard.writeText(row.fileMd5);
-              window.$message?.success('MD5已复制');
+              window.$message?.success($t('page.knowledgeBase.md5Copied'));
             }}
-            title="点击复制MD5"
+            title={$t('page.knowledgeBase.copyMd5')}
           >
             {row.fileMd5.substring(0, 8)}...
           </span>
@@ -115,63 +116,67 @@ const { columns, columnChecks, data, getData, loading, mobilePagination } = useT
     },
     {
       key: 'totalSize',
-      title: '文件大小',
+      title: $t('page.knowledgeBase.column.fileSize'),
       width: 100,
       render: row => fileSize(row.totalSize)
     },
     {
       key: 'estimatedEmbeddingTokens',
-      title: '预估向量化',
+      title: $t('page.knowledgeBase.column.estimatedEmbedding'),
       width: 160,
       render: row => renderEstimatedEmbeddingUsage(row)
     },
     {
       key: 'actualEmbeddingTokens',
-      title: '实际向量化',
+      title: $t('page.knowledgeBase.column.actualEmbedding'),
       width: 160,
       render: row => renderActualEmbeddingUsage(row)
     },
     {
       key: 'status',
-      title: '上传状态',
+      title: $t('page.knowledgeBase.column.uploadStatus'),
       width: 100,
       render: row => renderStatus(row.status, row.progress)
     },
     {
       key: 'orgTagName',
-      title: '组织标签',
+      title: $t('page.knowledgeBase.column.orgTag'),
       width: 150,
       ellipsis: { tooltip: true, lineClamp: 2 }
     },
     {
       key: 'isPublic',
-      title: '是否公开',
+      title: $t('page.knowledgeBase.column.publicStatus'),
       width: 100,
-      render: row => (row.public || row.isPublic ? <NTag type="success">公开</NTag> : <NTag type="warning">私有</NTag>)
+      render: row => (
+        row.public || row.isPublic
+          ? <NTag type="success">{$t('page.knowledgeBase.public')}</NTag>
+          : <NTag type="warning">{$t('page.knowledgeBase.private')}</NTag>
+      )
     },
     {
       key: 'createdAt',
-      title: '上传时间',
+      title: $t('page.knowledgeBase.column.uploadTime'),
       width: 100,
       render: row => dayjs(row.createdAt).format('YYYY-MM-DD')
     },
     {
       key: 'operate',
-      title: '操作',
+      title: $t('page.knowledgeBase.column.operation'),
       width: 180,
       render: row => (
         <div class="flex gap-4">
           {canManageFile(row) ? renderResumeUploadButton(row) : null}
           <NButton type="primary" ghost size="small" onClick={() => handleFilePreview(row.fileName, row.fileMd5)}>
-            预览
+            {$t('page.knowledgeBase.preview')}
           </NButton>
           {canManageFile(row) ? (
             <NPopconfirm onPositiveClick={() => handleDelete(row.fileMd5)}>
               {{
-                default: () => '确认删除当前文件吗？',
+                default: () => $t('page.knowledgeBase.deleteConfirm'),
                 trigger: () => (
                   <NButton type="error" ghost size="small">
-                    删除
+                    {$t('common.delete')}
                   </NButton>
                 )
               }}
@@ -255,7 +260,7 @@ async function handleDelete(fileMd5: string) {
   const { error } = await request({ url: `/documents/${fileMd5}`, method: 'DELETE' });
   if (!error) {
     tasks.value.splice(index, 1);
-    window.$message?.success('删除成功');
+    window.$message?.success($t('common.deleteSuccess'));
     await getData();
   }
 }
@@ -276,8 +281,8 @@ function handleSearch() {
 
 // 渲染上传状态
 function renderStatus(status: UploadStatus, percentage: number) {
-  if (status === UploadStatus.Completed) return <NTag type="success">已完成</NTag>;
-  else if (status === UploadStatus.Break) return <NTag type="error">上传中断</NTag>;
+  if (status === UploadStatus.Completed) return <NTag type="success">{$t('page.knowledgeBase.completed')}</NTag>;
+  else if (status === UploadStatus.Break) return <NTag type="error">{$t('page.knowledgeBase.uploadInterrupted')}</NTag>;
   return <NProgress percentage={percentage} processing />;
 }
 
@@ -286,12 +291,12 @@ function renderEstimatedEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
     return <span class="text-xs text-stone-400">-</span>;
   }
 
-  const estimatedTokenLabel = Number(row.estimatedEmbeddingTokens).toLocaleString();
-  const estimatedChunkLabel = Number(row.estimatedChunkCount || 0).toLocaleString();
+  const estimatedTokenLabel = Number(row.estimatedEmbeddingTokens).toLocaleString(appStore.locale);
+  const estimatedChunkLabel = Number(row.estimatedChunkCount || 0).toLocaleString(appStore.locale);
   return (
     <div class="text-xs text-stone-600 leading-5">
       <div>{estimatedTokenLabel} Tokens</div>
-      <div class="text-stone-400">{estimatedChunkLabel} 个切片</div>
+      <div class="text-stone-400">{$t('page.knowledgeBase.chunks', { count: estimatedChunkLabel })}</div>
     </div>
   );
 }
@@ -324,18 +329,18 @@ async function handleRetryVectorization(row: Api.KnowledgeBase.UploadTask) {
   row.vectorizationErrorMessage = null;
   row.actualEmbeddingTokens = undefined;
   row.actualChunkCount = undefined;
-  window.$message?.success('已提交异步向量化重试任务');
+  window.$message?.success($t('page.knowledgeBase.retryVectorizationSubmitted'));
   await getList();
 }
 
 function renderActualEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
   if (hasActualVectorizationUsage(row)) {
-    const actualTokenLabel = Number(row.actualEmbeddingTokens).toLocaleString();
-    const actualChunkLabel = Number(row.actualChunkCount || 0).toLocaleString();
+    const actualTokenLabel = Number(row.actualEmbeddingTokens).toLocaleString(appStore.locale);
+    const actualChunkLabel = Number(row.actualChunkCount || 0).toLocaleString(appStore.locale);
     return (
       <div class="text-xs text-emerald-700 leading-5">
         <div>{actualTokenLabel} Tokens</div>
-        <div class="text-stone-400">{actualChunkLabel} 个切片</div>
+        <div class="text-stone-400">{$t('page.knowledgeBase.chunks', { count: actualChunkLabel })}</div>
       </div>
     );
   }
@@ -343,8 +348,8 @@ function renderActualEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
   if (isVectorizationProcessing(row)) {
     return (
       <div class="text-xs text-sky-700 leading-5">
-        <div>向量化处理中</div>
-        <div class="text-stone-400">完成后会回写实际 Tokens</div>
+        <div>{$t('page.knowledgeBase.vectorizing')}</div>
+        <div class="text-stone-400">{$t('page.knowledgeBase.vectorizingHint')}</div>
       </div>
     );
   }
@@ -352,14 +357,14 @@ function renderActualEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
   if (row.vectorizationStatus === 'COMPLETED') {
     return (
       <div class="flex flex-col gap-6px text-xs leading-5">
-        <div class="text-emerald-700 font-500">向量化已完成</div>
+        <div class="text-emerald-700 font-500">{$t('page.knowledgeBase.vectorizationCompleted')}</div>
         <NEllipsis tooltip lineClamp={2} class="text-stone-500">
-          {row.vectorizationErrorMessage || '历史数据未统计实际 Tokens，可按需重试回写'}
+          {row.vectorizationErrorMessage || $t('page.knowledgeBase.historicalTokensMissing')}
         </NEllipsis>
         {canRetryVectorization(row) ? (
           <div>
             <NButton size="tiny" ghost onClick={() => handleRetryVectorization(row)}>
-              重试向量化
+              {$t('page.knowledgeBase.retryVectorization')}
             </NButton>
           </div>
         ) : null}
@@ -370,14 +375,14 @@ function renderActualEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
   if (row.vectorizationStatus === 'FAILED') {
     return (
       <div class="flex flex-col gap-6px text-xs leading-5">
-        <div class="text-rose-600 font-500">向量化失败</div>
+        <div class="text-rose-600 font-500">{$t('page.knowledgeBase.vectorizationFailed')}</div>
         <NEllipsis tooltip lineClamp={2} class="text-stone-500">
-          {row.vectorizationErrorMessage || '请检查 Embedding 额度或稍后重试'}
+          {row.vectorizationErrorMessage || $t('page.knowledgeBase.vectorizationFailedHint')}
         </NEllipsis>
         {canRetryVectorization(row) ? (
           <div>
             <NButton size="tiny" type="error" ghost onClick={() => handleRetryVectorization(row)}>
-              重试向量化
+              {$t('page.knowledgeBase.retryVectorization')}
             </NButton>
           </div>
         ) : null}
@@ -388,11 +393,11 @@ function renderActualEmbeddingUsage(row: Api.KnowledgeBase.UploadTask) {
   if (canRetryVectorization(row)) {
     return (
       <div class="flex flex-col gap-6px text-xs leading-5">
-        <div class="text-amber-600">暂无实际向量化结果</div>
-        <div class="text-stone-400">可能仍在处理，或历史任务未回写结果</div>
+        <div class="text-amber-600">{$t('page.knowledgeBase.noActualVectorization')}</div>
+        <div class="text-stone-400">{$t('page.knowledgeBase.noActualVectorizationHint')}</div>
         <div>
           <NButton size="tiny" ghost onClick={() => handleRetryVectorization(row)}>
-            重试向量化
+            {$t('page.knowledgeBase.retryVectorization')}
           </NButton>
         </div>
       </div>
@@ -445,7 +450,7 @@ function renderResumeUploadButton(row: Api.KnowledgeBase.UploadTask) {
     if (row.file)
       return (
         <NButton type="primary" size="small" ghost onClick={() => resumeUpload(row)}>
-          续传
+          {$t('page.knowledgeBase.resumeUpload')}
         </NButton>
       );
     return (
@@ -457,7 +462,7 @@ function renderResumeUploadButton(row: Api.KnowledgeBase.UploadTask) {
         class="w-fit"
       >
         <NButton type="primary" size="small" ghost>
-          续传
+          {$t('page.knowledgeBase.resumeUpload')}
         </NButton>
       </NUpload>
     );
@@ -477,7 +482,7 @@ async function onBeforeUpload(
 ) {
   const md5 = await calculateMD5(options.file.file!);
   if (md5 !== row.fileMd5) {
-    window.$message?.error('两次上传的文件不一致');
+    window.$message?.error($t('page.knowledgeBase.resumeFileMismatch'));
     return false;
   }
   loading.value = true;
@@ -501,7 +506,7 @@ async function onBeforeUpload(
 
 <template>
   <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <NCard title="文件列表" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
+    <NCard :title="$t('page.knowledgeBase.title')" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
       <template #header-extra>
         <TableHeaderOperation v-model:columns="columnChecks" :loading="loading" @add="handleUpload" @refresh="getList">
           <template #prefix>
@@ -509,7 +514,7 @@ async function onBeforeUpload(
               <template #icon>
                 <icon-ic-round-search class="text-icon" />
               </template>
-              检索知识库
+              {{ $t('page.knowledgeBase.searchKnowledge') }}
             </NButton>
           </template>
         </TableHeaderOperation>
