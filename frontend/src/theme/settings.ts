@@ -22,7 +22,7 @@ export const themeSettings: App.Theme.ThemeSetting = {
     mixChildMenuWidth: 200
   },
   footer: { visible: false, fixed: false, height: 48, right: true },
-  watermark: { visible: false, text: 'RAG知识库' },
+  watermark: { visible: false, text: 'SourceWeave' },
   tokens: {
     light: {
       colors: {

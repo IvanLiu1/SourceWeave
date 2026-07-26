@@ -1,6 +1,6 @@
 const local: App.I18n.Schema = {
   system: {
-    title: 'RAG Knowledge Base',
+    title: 'SourceWeave',
     updateTitle: 'System Version Update Notification',
     updateContent: 'A new version of the system has been detected. Do you want to refresh the page immediately?',
     updateConfirm: 'Refresh immediately',
@@ -229,7 +229,7 @@ const local: App.I18n.Schema = {
     chat: {
       expandConversationList: 'Expand conversation list',
       input: {
-        placeholder: 'Message RAG Knowledge Base. Enter to send, Shift+Enter for a new line',
+        placeholder: 'Message SourceWeave. Enter to send, Shift+Enter for a new line',
         newlineHint: 'Shift+Enter for a new line',
         connected: 'Connected',
         reconnecting: 'Reconnecting',

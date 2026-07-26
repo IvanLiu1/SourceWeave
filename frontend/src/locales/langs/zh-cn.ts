@@ -1,6 +1,6 @@
 const local = {
   system: {
-    title: 'RAG知识库',
+    title: 'SourceWeave',
     updateTitle: '系统版本更新通知',
     updateContent: '检测到系统有新版本发布，是否立即刷新页面？',
     updateConfirm: '立即刷新',
@@ -229,7 +229,7 @@ const local = {
     chat: {
       expandConversationList: '展开对话列表',
       input: {
-        placeholder: '给 RAG知识库 发送消息，Enter 发送，Shift+Enter 换行',
+        placeholder: '给 SourceWeave 发送消息，Enter 发送，Shift+Enter 换行',
         newlineHint: 'Shift+Enter 换行',
         connected: '已连接',
         reconnecting: '重连中',

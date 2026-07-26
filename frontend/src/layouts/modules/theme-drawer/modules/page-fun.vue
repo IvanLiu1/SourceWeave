@@ -124,7 +124,7 @@ const isWrapperScrollMode = computed(() => themeStore.layout.scrollMode === 'wra
         type="text"
         size="small"
         class="w-120px"
-        placeholder="RAG知识库"
+        placeholder="SourceWeave"
       />
     </SettingItem>
     <SettingItem key="9" :label="$t('theme.header.multilingual.visible')">

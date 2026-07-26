@@ -4,7 +4,7 @@ This file is the agent-facing working agreement for the `ragproject` repository.
 
 ## Purpose
 
-ragproject (派聪明) is an enterprise AI knowledge management system built around a RAG workflow:
+SourceWeave is an enterprise AI knowledge management system built around a RAG workflow:
 
 - Spring Boot backend
 - Vue 3 + TypeScript frontend
@@ -125,7 +125,7 @@ Do not stop at “frontend shows empty”; verify whether:
 
 ### Multi-tenant behavior
 
-ragproject uses organization tags and user/org relationships.
+SourceWeave uses organization tags and user/org relationships.
 
 When changing queries or admin views, verify whether filtering is driven by:
 
