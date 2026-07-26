@@ -97,10 +97,10 @@ async function handleSubmit() {
       </NButton>
 
       <span class="text-center">
-        登录即代表已阅读并同意我们的
-        <NButton text type="primary">用户协议</NButton>
-        和
-        <NButton text type="primary">隐私政策</NButton>
+        {{ $t('page.login.register.agreement') }}
+        <NButton text type="primary">{{ $t('page.login.register.protocol') }}</NButton>
+        {{ $t('page.login.register.and') }}
+        <NButton text type="primary">{{ $t('page.login.register.policy') }}</NButton>
       </span>
     </div>
   </NForm>

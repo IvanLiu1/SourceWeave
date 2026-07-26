@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { $t } from '@/locales';
+
 defineOptions({
   name: 'ConversationSidebar'
 });
@@ -60,7 +62,7 @@ function formatDate(dateStr?: string) {
   >
     <div class="flex w-[260px] flex-1 flex-col overflow-hidden" :class="{ 'pointer-events-none invisible': collapsed }">
     <div class="flex items-center justify-between px-4 pt-4 pb-2">
-      <span class="text-15px font-600">对话列表</span>
+      <span class="text-15px font-600">{{ $t('page.chat.sidebar.title') }}</span>
       <div class="flex items-center gap-1">
         <NButton
           type="primary"
@@ -71,7 +73,7 @@ function formatDate(dateStr?: string) {
           <template #icon>
             <icon-material-symbols:add-rounded />
           </template>
-          新对话
+          {{ $t('page.chat.sidebar.newChat') }}
         </NButton>
         <NButton text size="tiny" @click="handleCollapse">
           <template #icon>
@@ -90,7 +92,7 @@ function formatDate(dateStr?: string) {
           : 'text-#666 dark:text-#999'"
         @click="setActiveTab('active')"
       >
-        活跃
+        {{ $t('page.chat.sidebar.active') }}
       </div>
       <div
         class="flex-1 cursor-pointer rounded-md px-3 py-1.5 text-center text-12px font-500 transition-all"
@@ -99,7 +101,7 @@ function formatDate(dateStr?: string) {
           : 'text-#666 dark:text-#999'"
         @click="setActiveTab('archived')"
       >
-        已归档
+        {{ $t('page.chat.sidebar.archived') }}
       </div>
     </div>
 
@@ -112,7 +114,9 @@ function formatDate(dateStr?: string) {
             class="flex flex-col items-center justify-center gap-3 py-16"
           >
             <icon-material-symbols:chat-outline-rounded class="text-36px color-#ccc dark:color-#444" />
-            <span class="text-13px color-#aaa">{{ activeTab === 'active' ? '暂无对话记录' : '暂无归档对话' }}</span>
+            <span class="text-13px color-#aaa">
+              {{ activeTab === 'active' ? $t('page.chat.sidebar.emptyActive') : $t('page.chat.sidebar.emptyArchived') }}
+            </span>
           </div>
 
           <div
@@ -156,7 +160,7 @@ function formatDate(dateStr?: string) {
                   </template>
                 </NButton>
               </template>
-              归档后可在「已归档」中找回
+              {{ $t('page.chat.sidebar.archiveConfirm') }}
             </NPopconfirm>
             <NButton
               v-else

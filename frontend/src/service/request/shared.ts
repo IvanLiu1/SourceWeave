@@ -1,11 +1,12 @@
 import { useAuthStore } from '@/store/modules/auth';
 import { localStg } from '@/utils/storage';
+import { $t } from '@/locales';
 import { fetchRefreshToken } from '../api';
 import type { RequestInstanceState } from './type';
 
-const backendMessageMap: Record<string, string> = {
-  REGISTRATION_CLOSED: '当前暂未开放注册',
-  'Username already exists': '用户名已存在'
+const backendMessageMap: Record<string, App.I18n.I18nKey> = {
+  REGISTRATION_CLOSED: 'request.registrationClosed',
+  'Username already exists': 'request.usernameExists'
 };
 
 export function getAuthorization() {
@@ -16,7 +17,8 @@ export function getAuthorization() {
 }
 
 export function normalizeBackendMessage(message: string) {
-  return backendMessageMap[message] || message;
+  const localeKey = backendMessageMap[message];
+  return localeKey ? $t(localeKey) : message;
 }
 
 /** refresh token */

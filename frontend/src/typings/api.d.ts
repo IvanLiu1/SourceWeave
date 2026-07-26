@@ -334,6 +334,12 @@ declare namespace Api {
       conversationId?: string;
     }
 
+    interface SendPayload {
+      type: 'chat';
+      message: string;
+      locale: App.I18n.LangType;
+    }
+
     interface Output {
       chunk: string;
     }

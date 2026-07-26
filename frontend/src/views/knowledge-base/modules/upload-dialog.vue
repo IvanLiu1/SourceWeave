@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { uploadAccept } from '@/constants/common';
+import { $t } from '@/locales';
 
 defineOptions({
   name: 'UploadDialog'
@@ -39,7 +40,10 @@ const fileSizeLimitError = computed(() => {
   if (!file || !model.value.uploadMaxSizeBytes) return '';
   if (file.size <= model.value.uploadMaxSizeBytes) return '';
 
-  return `当前组织限制非管理员上传文件不超过 ${model.value.uploadMaxSizeMb} MB，当前文件大小为 ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+  return $t('page.knowledgeBase.upload.sizeLimit', {
+    limit: model.value.uploadMaxSizeMb,
+    size: (file.size / 1024 / 1024).toFixed(2)
+  });
 });
 
 const submitDisabled = computed(() => loading.value || Boolean(fileSizeLimitError.value));
@@ -102,17 +106,17 @@ function onUpdate(option: unknown) {
   <NModal
     v-model:show="visible"
     preset="dialog"
-    title="文件上传"
+    :title="$t('page.knowledgeBase.upload.title')"
     :show-icon="false"
     :mask-closable="false"
     class="w-500px!"
     @positive-click="handleSubmit"
   >
     <NForm ref="formRef" :model="model" :rules="rules" label-placement="left" :label-width="100" mt-10>
-      <NFormItem v-if="authStore.isAdmin" label="组织标签" path="orgTag">
+      <NFormItem v-if="authStore.isAdmin" :label="$t('page.knowledgeBase.upload.orgTag')" path="orgTag">
         <OrgTagCascader v-model:value="model.orgTag" @change="onUpdate" />
       </NFormItem>
-      <NFormItem v-else label="组织标签" path="orgTag">
+      <NFormItem v-else :label="$t('page.knowledgeBase.upload.orgTag')" path="orgTag">
         <TheSelect
           v-model:value="model.orgTag"
           url="/users/org-tags"
@@ -124,15 +128,15 @@ function onUpdate(option: unknown) {
         />
       </NFormItem>
 
-      <NFormItem label="是否公开" path="isPublic">
+      <NFormItem :label="$t('page.knowledgeBase.upload.publicStatus')" path="isPublic">
         <NRadioGroup v-model:value="model.isPublic" name="radiogroup">
           <NSpace :size="16">
-            <NRadio :value="true">公开</NRadio>
-            <NRadio :value="false">私有</NRadio>
+            <NRadio :value="true">{{ $t('page.knowledgeBase.public') }}</NRadio>
+            <NRadio :value="false">{{ $t('page.knowledgeBase.private') }}</NRadio>
           </NSpace>
         </NRadioGroup>
       </NFormItem>
-      <NFormItem label="标签描述" path="fileList">
+      <NFormItem :label="$t('page.knowledgeBase.upload.file')" path="fileList">
         <NUpload
           v-model:file-list="model.fileList"
           :accept="uploadAccept"
@@ -140,20 +144,20 @@ function onUpdate(option: unknown) {
           :multiple="false"
           :default-upload="false"
         >
-          <NButton>上传文件</NButton>
+          <NButton>{{ $t('page.knowledgeBase.upload.chooseFile') }}</NButton>
         </NUpload>
         <div v-if="fileSizeLimitError" class="mt-8px text-12px text-#ef4444">
           {{ fileSizeLimitError }}
         </div>
         <div v-else-if="!authStore.isAdmin && model.uploadMaxSizeMb" class="mt-8px text-12px text-#d97706">
-          当前组织限制非管理员上传文件不超过 {{ model.uploadMaxSizeMb }} MB
+          {{ $t('page.knowledgeBase.upload.sizeLimitHint', { limit: model.uploadMaxSizeMb }) }}
         </div>
       </NFormItem>
     </NForm>
     <template #action>
       <NSpace :size="16">
-        <NButton @click="close">取消</NButton>
-        <NButton type="primary" :disabled="submitDisabled" @click="handleSubmit">保存</NButton>
+        <NButton @click="close">{{ $t('common.cancel') }}</NButton>
+        <NButton type="primary" :disabled="submitDisabled" @click="handleSubmit">{{ $t('common.save') }}</NButton>
       </NSpace>
     </template>
   </NModal>

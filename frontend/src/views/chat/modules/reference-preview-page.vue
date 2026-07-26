@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NEmpty, NSpin } from 'naive-ui';
 import { request } from '@/service/request';
+import { $t } from '@/locales';
 import FilePreview from '@/components/custom/file-preview.vue';
 
 defineOptions({ name: 'ReferencePreviewPage' });
@@ -103,7 +104,7 @@ async function loadReferenceDetail() {
     });
 
     if (error || !data) {
-      loadError.value = error?.message || '引用详情加载失败';
+      loadError.value = error?.message || $t('page.chat.reference.loadFailed');
       return;
     }
 
@@ -119,7 +120,7 @@ async function loadReferenceDetail() {
     score.value = data.score ?? null;
     chunkId.value = data.chunkId ?? null;
   } catch (error: any) {
-    loadError.value = error?.message || '引用详情加载失败';
+    loadError.value = error?.message || $t('page.chat.reference.loadFailed');
   } finally {
     loading.value = false;
   }
@@ -147,11 +148,11 @@ watch(
   <div class="flex-col gap-4">
     <div v-if="loading && !hasPreviewTarget" class="preview-page-state">
       <NSpin size="large" />
-      <span>正在加载引用详情...</span>
+      <span>{{ $t('page.chat.reference.loading') }}</span>
     </div>
 
     <div v-else-if="!hasPreviewTarget" class="preview-page-empty">
-      <NEmpty :description="loadError || '没有拿到可预览的引用信息'" />
+      <NEmpty :description="loadError || $t('page.chat.reference.empty')" />
     </div>
 
     <div v-else class="preview-page-shell">

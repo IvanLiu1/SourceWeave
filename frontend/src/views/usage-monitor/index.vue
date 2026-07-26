@@ -3,6 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { NButton, NCard, NEmpty, NTag } from 'naive-ui';
 import type { ECOption } from '@/hooks/common/echarts';
 import { useEcharts } from '@/hooks/common/echarts';
+import { $t } from '@/locales';
+
+const appStore = useAppStore();
 
 const trendWindow = ref<7 | 30>(7);
 const overviewLoading = ref(false);
@@ -118,7 +121,7 @@ async function submitRateLimits() {
 
   if (!error && data) {
     rateLimits.value = cloneRateLimitSettings(data);
-    window.$message?.success('限流配置已更新');
+    window.$message?.success($t('page.usageMonitor.rateLimitUpdated'));
   }
 
   rateLimitSaving.value = false;
@@ -149,13 +152,13 @@ const { domRef: trendChartRef, updateOptions } = useEcharts<ECOption>(() => ({
     },
     {
       type: 'value',
-      name: 'Requests'
+      name: $t('page.usageMonitor.chart.requests')
     }
   ],
   series: []
 }));
 
-watch([overview, trendWindow], async () => {
+watch([overview, trendWindow, () => appStore.locale], async () => {
   const trends = overview.value?.trends || [];
   await updateOptions(() => ({
     tooltip: {
@@ -182,7 +185,7 @@ watch([overview, trendWindow], async () => {
       },
       {
         type: 'value',
-        name: 'Requests'
+        name: $t('page.usageMonitor.chart.requests')
       }
     ],
     series: [
@@ -199,7 +202,7 @@ watch([overview, trendWindow], async () => {
         data: trends.map(item => item.embeddingUsedTokens)
       },
       {
-        name: 'Chat Messages',
+        name: $t('page.usageMonitor.chart.chatMessages'),
         type: 'bar',
         yAxisIndex: 1,
         barMaxWidth: 18,
@@ -209,7 +212,7 @@ watch([overview, trendWindow], async () => {
         data: trends.map(item => item.chatRequestCount)
       },
       {
-        name: 'LLM Requests',
+        name: $t('page.usageMonitor.chart.llmRequests'),
         type: 'bar',
         yAxisIndex: 1,
         barMaxWidth: 18,
@@ -219,7 +222,7 @@ watch([overview, trendWindow], async () => {
         data: trends.map(item => item.llmRequestCount)
       },
       {
-        name: 'Embedding Requests',
+        name: $t('page.usageMonitor.chart.embeddingRequests'),
         type: 'bar',
         yAxisIndex: 1,
         barMaxWidth: 18,
@@ -237,7 +240,7 @@ const criticalAlertCount = computed(() => overview.value?.alerts.filter(item => 
 const todaySummary = computed(() => overview.value?.today);
 
 function formatNumber(value?: number) {
-  return Number(value || 0).toLocaleString();
+  return Number(value || 0).toLocaleString(appStore.locale);
 }
 
 function scopeLabel(scope: 'llm' | 'embedding') {
@@ -257,134 +260,138 @@ onMounted(() => {
 <template>
   <div class="min-h-500px flex-col-stretch gap-16px overflow-auto">
     <NCard :bordered="false" size="small" class="card-wrapper">
-      <template #header>调用限流配置</template>
+      <template #header>{{ $t('page.usageMonitor.rateLimitTitle') }}</template>
       <template #header-extra>
         <div class="flex items-center gap-2">
-          <span class="text-xs text-stone-400">保存后立即对新请求生效</span>
+          <span class="text-xs text-stone-400">{{ $t('page.usageMonitor.effectiveImmediately') }}</span>
           <NButton type="primary" size="small" :loading="rateLimitSaving" @click="submitRateLimits">
-            保存配置
+            {{ $t('page.usageMonitor.saveConfig') }}
           </NButton>
         </div>
       </template>
 
       <NSpin :show="rateLimitLoading">
         <div class="mb-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-500">
-          这里集中管理聊天消息、LLM 全网 Token 预算，以及 Embedding 上传/查询两条链路的运行时限流配置。保存后对新请求立即生效，无需改 `application.yml`。
+          {{ $t('page.usageMonitor.rateLimitDescription') }}
         </div>
 
         <div v-if="rateLimits" class="grid gap-4 xl:grid-cols-2">
           <div class="limit-card">
-            <div class="limit-title">聊天消息</div>
+            <div class="limit-title">{{ $t('page.usageMonitor.chatMessages') }}</div>
             <div class="limit-grid">
               <div>
-                <div class="limit-label">次数上限</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.countLimit') }}</div>
                 <NInputNumber v-model:value="rateLimits.chatMessage.max" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.windowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.chatMessage.windowSeconds" :min="1" class="w-full" />
               </div>
             </div>
           </div>
 
           <div class="limit-card">
-            <div class="limit-title">LLM 全网 Token 预算</div>
+            <div class="limit-title">{{ $t('page.usageMonitor.llmGlobalBudget') }}</div>
             <div class="limit-grid">
               <div>
-                <div class="limit-label">分钟 Token 上限</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.minuteTokenLimit') }}</div>
                 <NInputNumber v-model:value="rateLimits.llmGlobalToken.minuteMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">分钟窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.minuteWindowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.llmGlobalToken.minuteWindowSeconds" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">日 Token 上限</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.dayTokenLimit') }}</div>
                 <NInputNumber v-model:value="rateLimits.llmGlobalToken.dayMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">日窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.dayWindowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.llmGlobalToken.dayWindowSeconds" :min="1" class="w-full" />
               </div>
             </div>
           </div>
 
           <div class="limit-card">
-            <div class="limit-title">Embedding 上传 Token 预算</div>
+            <div class="limit-title">{{ $t('page.usageMonitor.embeddingUploadBudget') }}</div>
             <div class="limit-grid">
               <div>
-                <div class="limit-label">分钟 Token 上限</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.minuteTokenLimit') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingUploadToken.minuteMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">分钟窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.minuteWindowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingUploadToken.minuteWindowSeconds" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">日 Token 上限</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.dayTokenLimit') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingUploadToken.dayMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">日窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.dayWindowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingUploadToken.dayWindowSeconds" :min="1" class="w-full" />
               </div>
             </div>
           </div>
 
           <div class="limit-card">
-            <div class="limit-title">Embedding 查询</div>
+            <div class="limit-title">{{ $t('page.usageMonitor.embeddingQuery') }}</div>
             <div class="limit-grid">
               <div>
-                <div class="limit-label">单用户分钟次数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.perUserMinuteRequests') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryRequest.minuteMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">分钟窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.minuteWindowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryRequest.minuteWindowSeconds" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">单用户日次数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.perUserDayRequests') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryRequest.dayMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">日窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.dayWindowSeconds') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryRequest.dayWindowSeconds" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">全网分钟 Token</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.globalMinuteToken') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryGlobalToken.minuteMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">查询分钟窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.queryMinuteWindow') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryGlobalToken.minuteWindowSeconds" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">全网日 Token</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.globalDayToken') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryGlobalToken.dayMax" :min="1" class="w-full" />
               </div>
               <div>
-                <div class="limit-label">查询日窗口秒数</div>
+                <div class="limit-label">{{ $t('page.usageMonitor.queryDayWindow') }}</div>
                 <NInputNumber v-model:value="rateLimits.embeddingQueryGlobalToken.dayWindowSeconds" :min="1" class="w-full" />
               </div>
             </div>
           </div>
         </div>
-        <NEmpty v-else size="small" description="暂无限流配置" />
+        <NEmpty v-else size="small" :description="$t('page.usageMonitor.noRateLimit')" />
       </NSpin>
     </NCard>
 
     <NCard :bordered="false" size="small" class="card-wrapper">
       <template #header>
         <div class="flex items-center gap-3">
-          <span>用量总览</span>
-          <NTag size="small" type="warning">今日告警 {{ alertCount }}</NTag>
-          <NTag size="small" type="error">超额 {{ criticalAlertCount }}</NTag>
+          <span>{{ $t('page.usageMonitor.overview') }}</span>
+          <NTag size="small" type="warning">{{ $t('page.usageMonitor.todayAlerts', { count: alertCount }) }}</NTag>
+          <NTag size="small" type="error">{{ $t('page.usageMonitor.exceeded', { count: criticalAlertCount }) }}</NTag>
         </div>
       </template>
       <template #header-extra>
         <div class="flex items-center gap-2">
-          <NButton size="small" :type="trendWindow === 7 ? 'primary' : 'default'" @click="trendWindow = 7; getOverview()">近7天</NButton>
-          <NButton size="small" :type="trendWindow === 30 ? 'primary' : 'default'" @click="trendWindow = 30; getOverview()">近30天</NButton>
+          <NButton size="small" :type="trendWindow === 7 ? 'primary' : 'default'" @click="trendWindow = 7; getOverview()">
+            {{ $t('page.usageMonitor.lastDays', { days: 7 }) }}
+          </NButton>
+          <NButton size="small" :type="trendWindow === 30 ? 'primary' : 'default'" @click="trendWindow = 30; getOverview()">
+            {{ $t('page.usageMonitor.lastDays', { days: 30 }) }}
+          </NButton>
         </div>
       </template>
 
@@ -392,41 +399,41 @@ onMounted(() => {
         <div class="flex flex-col gap-4">
           <div class="grid gap-4 xl:grid-cols-5 sm:grid-cols-2">
             <div class="summary-card">
-              <div class="summary-label">今日聊天消息</div>
+              <div class="summary-label">{{ $t('page.usageMonitor.todayChat') }}</div>
               <div class="summary-value">{{ formatNumber(todaySummary?.chatRequestCount) }}</div>
-              <div class="summary-sub">按通过限流的消息数统计</div>
+              <div class="summary-sub">{{ $t('page.usageMonitor.passedMessages') }}</div>
             </div>
             <div class="summary-card">
-              <div class="summary-label">今日 LLM Tokens</div>
+              <div class="summary-label">{{ $t('page.usageMonitor.todayLlmTokens') }}</div>
               <div class="summary-value">{{ formatNumber(todaySummary?.llmUsedTokens) }}</div>
-              <div class="summary-sub">请求 {{ formatNumber(todaySummary?.llmRequestCount) }} 次</div>
+              <div class="summary-sub">{{ $t('page.usageMonitor.requests', { count: formatNumber(todaySummary?.llmRequestCount) }) }}</div>
             </div>
             <div class="summary-card">
-              <div class="summary-label">今日 Embedding Tokens</div>
+              <div class="summary-label">{{ $t('page.usageMonitor.todayEmbeddingTokens') }}</div>
               <div class="summary-value">{{ formatNumber(todaySummary?.embeddingUsedTokens) }}</div>
-              <div class="summary-sub">请求 {{ formatNumber(todaySummary?.embeddingRequestCount) }} 次</div>
+              <div class="summary-sub">{{ $t('page.usageMonitor.requests', { count: formatNumber(todaySummary?.embeddingRequestCount) }) }}</div>
             </div>
             <div class="summary-card is-alert">
-              <div class="summary-label">高风险用户</div>
+              <div class="summary-label">{{ $t('page.usageMonitor.highRiskUsers') }}</div>
               <div class="summary-value">{{ criticalAlertCount }}</div>
-              <div class="summary-sub">额度已耗尽</div>
+              <div class="summary-sub">{{ $t('page.usageMonitor.quotaExhausted') }}</div>
             </div>
             <div class="summary-card">
-              <div class="summary-label">总告警数</div>
+              <div class="summary-label">{{ $t('page.usageMonitor.totalAlerts') }}</div>
               <div class="summary-value">{{ alertCount }}</div>
-              <div class="summary-sub">含 80% 以上预警</div>
+              <div class="summary-sub">{{ $t('page.usageMonitor.includesWarnings') }}</div>
             </div>
           </div>
 
           <div class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
             <NCard size="small" embedded class="overview-section">
-              <template #header>调用趋势</template>
+              <template #header>{{ $t('page.usageMonitor.trends') }}</template>
               <div ref="trendChartRef" class="h-360px w-full" />
             </NCard>
 
             <div class="flex flex-col gap-4">
               <NCard size="small" embedded class="overview-section">
-                <template #header>超额与预警</template>
+                <template #header>{{ $t('page.usageMonitor.overageAndWarnings') }}</template>
                 <div v-if="overview?.alerts?.length" class="flex flex-col gap-3">
                   <div
                     v-for="alert in overview.alerts.slice(0, 6)"
@@ -441,15 +448,20 @@ onMounted(() => {
                       <NTag size="small" :type="alertType(alert.level)">{{ alert.message }}</NTag>
                     </div>
                     <div class="text-xs text-stone-500">
-                      {{ formatNumber(alert.usedTokens) }} / {{ formatNumber(alert.limitTokens) }}，剩余 {{ formatNumber(alert.remainingTokens) }}，{{ alert.requestCount }} 次
+                      {{ $t('page.usageMonitor.remainingRequests', {
+                        used: formatNumber(alert.usedTokens),
+                        limit: formatNumber(alert.limitTokens),
+                        remaining: formatNumber(alert.remainingTokens),
+                        count: formatNumber(alert.requestCount)
+                      }) }}
                     </div>
                   </div>
                 </div>
-                <NEmpty v-else size="small" description="暂无告警" />
+                <NEmpty v-else size="small" :description="$t('page.usageMonitor.noAlerts')" />
               </NCard>
 
               <NCard size="small" embedded class="overview-section">
-                <template #header>今日用量排行</template>
+                <template #header>{{ $t('page.usageMonitor.todayRanking') }}</template>
                 <div class="flex flex-col gap-4">
                   <div>
                     <div class="mb-2 text-xs font-semibold uppercase tracking-0.12em text-stone-400">LLM</div>
@@ -463,12 +475,16 @@ onMounted(() => {
                         <div class="flex-1">
                           <div class="font-medium text-stone-700">{{ item.username }}</div>
                           <div class="text-xs text-stone-500">
-                            {{ formatNumber(item.usedTokens) }} / {{ formatNumber(item.limitTokens) }} · {{ item.requestCount }} 次
+                            {{ $t('page.usageMonitor.rankingUsage', {
+                              used: formatNumber(item.usedTokens),
+                              limit: formatNumber(item.limitTokens),
+                              count: formatNumber(item.requestCount)
+                            }) }}
                           </div>
                         </div>
                       </div>
                     </div>
-                    <NEmpty v-else size="small" description="暂无数据" />
+                    <NEmpty v-else size="small" :description="$t('common.noData')" />
                   </div>
 
                   <div>
@@ -483,12 +499,16 @@ onMounted(() => {
                         <div class="flex-1">
                           <div class="font-medium text-stone-700">{{ item.username }}</div>
                           <div class="text-xs text-stone-500">
-                            {{ formatNumber(item.usedTokens) }} / {{ formatNumber(item.limitTokens) }} · {{ item.requestCount }} 次
+                            {{ $t('page.usageMonitor.rankingUsage', {
+                              used: formatNumber(item.usedTokens),
+                              limit: formatNumber(item.limitTokens),
+                              count: formatNumber(item.requestCount)
+                            }) }}
                           </div>
                         </div>
                       </div>
                     </div>
-                    <NEmpty v-else size="small" description="暂无数据" />
+                    <NEmpty v-else size="small" :description="$t('common.noData')" />
                   </div>
                 </div>
               </NCard>

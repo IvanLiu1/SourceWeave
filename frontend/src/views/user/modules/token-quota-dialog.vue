@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { $t } from '@/locales';
+
 defineOptions({
   name: 'TokenQuotaDialog'
 });
@@ -24,7 +26,7 @@ function createDefaultModel(): Model {
   return {
     llmToken: null,
     embeddingToken: null,
-    reason: '管理员手动追加'
+    reason: $t('page.user.tokenDialog.defaultReason')
   };
 }
 
@@ -40,11 +42,11 @@ async function handleSubmit() {
   const llmToken = normalizeToken(model.value.llmToken);
   const embeddingToken = normalizeToken(model.value.embeddingToken);
   if (llmToken < 0 || embeddingToken < 0) {
-    window.$message?.warning('追加 Token 数量不能为负数');
+    window.$message?.warning($t('page.user.tokenDialog.negative'));
     return;
   }
   if (llmToken === 0 && embeddingToken === 0) {
-    window.$message?.warning('请至少追加一种 Token 额度');
+    window.$message?.warning($t('page.user.tokenDialog.empty'));
     return;
   }
 
@@ -60,7 +62,7 @@ async function handleSubmit() {
       }
     });
     if (!res.error) {
-      window.$message?.success('Token 额度已追加');
+      window.$message?.success($t('page.user.tokenDialog.success'));
       close();
       emit('submitted');
     }
@@ -80,13 +82,13 @@ watch(visible, () => {
   <NModal
     v-model:show="visible"
     preset="dialog"
-    title="追加 Token 额度"
+    :title="$t('page.user.tokenDialog.title')"
     :show-icon="false"
     :mask-closable="false"
     class="w-520px!"
   >
     <NForm :model="model" label-placement="left" :label-width="128" mt-10>
-      <NFormItem label="用户名">
+      <NFormItem :label="$t('page.user.tokenDialog.username')">
         <NInput :value="rowData.username" readonly />
       </NFormItem>
       <NFormItem label="LLM Token">
@@ -96,7 +98,7 @@ watch(visible, () => {
           :step="10000"
           :precision="0"
           class="w-full"
-          placeholder="不追加可留空"
+          :placeholder="$t('page.user.tokenDialog.optionalPlaceholder')"
         />
       </NFormItem>
       <NFormItem label="Embedding Token">
@@ -106,17 +108,17 @@ watch(visible, () => {
           :step="10000"
           :precision="0"
           class="w-full"
-          placeholder="不追加可留空"
+          :placeholder="$t('page.user.tokenDialog.optionalPlaceholder')"
         />
       </NFormItem>
-      <NFormItem label="原因">
-        <NInput v-model:value="model.reason" maxlength="200" show-count placeholder="管理员手动追加" />
+      <NFormItem :label="$t('page.user.tokenDialog.reason')">
+        <NInput v-model:value="model.reason" maxlength="200" show-count :placeholder="$t('page.user.tokenDialog.defaultReason')" />
       </NFormItem>
     </NForm>
     <template #action>
       <NSpace :size="16">
-        <NButton @click="close">取消</NButton>
-        <NButton type="primary" :loading="loading" @click="handleSubmit">追加</NButton>
+        <NButton @click="close">{{ $t('common.cancel') }}</NButton>
+        <NButton type="primary" :loading="loading" @click="handleSubmit">{{ $t('page.user.tokenDialog.add') }}</NButton>
       </NSpace>
     </template>
   </NModal>

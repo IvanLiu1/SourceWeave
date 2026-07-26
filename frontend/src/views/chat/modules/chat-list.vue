@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NScrollbar } from 'naive-ui';
 import { VueMarkdownItProvider } from '@/vendor/vue-markdown-shiki';
+import { $t } from '@/locales';
 import ChatMessage from './chat-message.vue';
 
 defineOptions({
@@ -78,7 +79,7 @@ const showEmpty = computed(() => !loading.value && list.value.length === 0);
       <Teleport defer to="#header-extra">
         <div v-if="!showEmpty" class="flex items-center px-4">
           <NForm :model="params" label-placement="left" :show-feedback="false" inline>
-            <NFormItem label="时间" size="small">
+            <NFormItem :label="$t('page.chat.list.time')" size="small">
               <NDatePicker v-model:value="range" type="daterange" clearable size="small" />
             </NFormItem>
           </NForm>
@@ -91,10 +92,10 @@ const showEmpty = computed(() => !loading.value && list.value.length === 0);
           <icon-material-symbols:chat-outline-rounded class="text-36px text-[rgb(var(--primary-color)/0.5)]" />
         </div>
         <div class="text-15px font-500 color-#aaa">
-          {{ conversationId ? '开始新对话' : '选择或创建一个对话' }}
+          {{ conversationId ? $t('page.chat.list.startNew') : $t('page.chat.list.selectOrCreate') }}
         </div>
         <div class="text-12px color-#bbb">
-          在左侧选择一个对话，或点击「新对话」开始
+          {{ $t('page.chat.list.emptyHint') }}
         </div>
       </div>
 

@@ -37,7 +37,7 @@ async function handleSubmit() {
   loading.value = true;
   const { error } = await fetchRegister(model.username, model.password);
   if (!error) {
-    window.$message?.success('注册成功');
+    window.$message?.success($t('page.login.register.success'));
     toggleLoginModule('pwd-login');
   }
   loading.value = false;

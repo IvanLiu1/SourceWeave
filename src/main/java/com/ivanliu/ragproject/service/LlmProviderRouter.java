@@ -28,6 +28,8 @@ public class LlmProviderRouter {
     private static final int REACT_HISTORY_MAX_MESSAGES = 6;
     private static final int REACT_HISTORY_MAX_CONTENT_CHARS = 800;
     private static final int DEFAULT_REACT_MAX_COMPLETION_TOKENS = 2000;
+    private static final String DEFAULT_LOCALE = "zh-CN";
+    private static final String ENGLISH_LOCALE = "en-US";
 
     private final AiProperties aiProperties;
     private final RateLimitService rateLimitService;
@@ -53,13 +55,21 @@ public class LlmProviderRouter {
     public List<Map<String, Object>> buildReActMessages(String userMessage,
                                                         String context,
                                                         List<Map<String, String>> history) {
-        return buildReActMessages(userMessage, context, history, "");
+        return buildReActMessages(userMessage, context, history, "", DEFAULT_LOCALE);
     }
 
     public List<Map<String, Object>> buildReActMessages(String userMessage,
                                                         String context,
                                                         List<Map<String, String>> history,
                                                         String feedbackGuidance) {
+        return buildReActMessages(userMessage, context, history, feedbackGuidance, DEFAULT_LOCALE);
+    }
+
+    public List<Map<String, Object>> buildReActMessages(String userMessage,
+                                                        String context,
+                                                        List<Map<String, String>> history,
+                                                        String feedbackGuidance,
+                                                        String locale) {
         List<Map<String, Object>> messages = new ArrayList<>();
         AiProperties.Prompt promptCfg = aiProperties.getPrompt();
 
@@ -67,6 +77,7 @@ public class LlmProviderRouter {
         if (promptCfg.getRules() != null) {
             sysBuilder.append(promptCfg.getRules()).append("\n\n");
         }
+        appendLocalizedResponseContract(sysBuilder, normalizeLocale(locale));
         sysBuilder.append("本系统是「知识库优先」的问答助手：你的首要职责是基于本系统已收录的资料回答用户。除非命中下方明确的白名单，否则**每一个用户问题都必须先调用 search_knowledge**，再基于检索结果作答。\n\n")
                 .append("强制检索原则（默认行为）：\n")
                 .append("1. 默认调用 search_knowledge：只要问题涉及任何实体、名称、缩写、产品、项目、术语、流程、功能、实现、背景、对比、引用，或包含「这/它/该/上述/这个/那个」等上下文指代，无论你是否自认为已知答案，都必须先检索，不要等用户说「查知识库」。\n")
@@ -117,6 +128,27 @@ public class LlmProviderRouter {
         }
         messages.add(newMessage("user", userMessage));
         return messages;
+    }
+
+    private String normalizeLocale(String locale) {
+        return ENGLISH_LOCALE.equals(locale) ? ENGLISH_LOCALE : DEFAULT_LOCALE;
+    }
+
+    private void appendLocalizedResponseContract(StringBuilder builder, String locale) {
+        if (ENGLISH_LOCALE.equals(locale)) {
+            builder.append("Response requirements for this turn:\n")
+                    .append("1. Answer only in English.\n")
+                    .append("2. State the conclusion first, followed by supporting evidence.\n")
+                    .append("3. Cite references at sentence ends as (Source #N: filename), or (Source #N: filename | Page X) when a page number is available.\n")
+                    .append("4. If the available information is insufficient, say that no relevant information is available and explain why.\n\n");
+            return;
+        }
+
+        builder.append("本轮回答要求：\n")
+                .append("1. 仅用简体中文作答。\n")
+                .append("2. 先给结论，再给论据。\n")
+                .append("3. 在句末按（来源#N: 文件名）引用；有页码时使用（来源#N: 文件名 | 第X页）。\n")
+                .append("4. 信息不足时，说明暂无相关信息并给出原因。\n\n");
     }
 
     public StreamHandle streamReActTurn(String requesterId,

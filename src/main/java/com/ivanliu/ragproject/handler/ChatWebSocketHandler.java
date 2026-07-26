@@ -8,6 +8,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ivanliu.ragproject.model.ChatWebSocketRequest;
 import com.ivanliu.ragproject.service.ChatHandler;
 import com.ivanliu.ragproject.service.ChatSessionRegistry;
 import com.ivanliu.ragproject.utils.JwtUtils;
@@ -19,6 +20,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final Logger logger = LoggerFactory.getLogger(ChatWebSocketHandler.class);
     private static final String HEARTBEAT_PING = "__chat_ping__";
     private static final String HEARTBEAT_PONG = "__chat_pong__";
+    private static final String DEFAULT_LOCALE = "zh-CN";
+    private static final String ENGLISH_LOCALE = "en-US";
     private final ChatHandler chatHandler;
     private final ChatSessionRegistry chatSessionRegistry;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -90,30 +93,40 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             
             // 检查是否是JSON格式的系统指令
             if (payload.trim().startsWith("{")) {
+                ChatWebSocketRequest request = null;
                 try {
-                    Map<String, Object> jsonMessage = objectMapper.readValue(payload, Map.class);
-                    String messageType = (String) jsonMessage.get("type");
-                    String internalToken = (String) jsonMessage.get("_internal_cmd_token");
-                    String generationId = (String) jsonMessage.get("generationId");
+                    request = objectMapper.readValue(payload, ChatWebSocketRequest.class);
+                } catch (Exception jsonParseError) {
+                    // JSON解析失败，当作普通文本消息处理
+                    logger.debug("JSON解析失败，当作普通消息处理: {}", jsonParseError.getMessage());
+                }
+
+                if (request != null) {
+                    String messageType = request.type();
                     
                     // 只有包含正确内部令牌的停止指令才处理
-                    if ("stop".equals(messageType) && INTERNAL_CMD_TOKEN.equals(internalToken)) {
+                    if ("stop".equals(messageType) && INTERNAL_CMD_TOKEN.equals(request.internalCommandToken())) {
                         // 处理停止指令
                         logger.info("收到有效的停止按钮指令，用户ID: {}，会话ID: {}", userId, session.getId());
-                        chatHandler.stopResponse(userId, generationId);
+                        chatHandler.stopResponse(userId, request.generationId());
+                        return;
+                    }
+
+                    if ("chat".equals(messageType)) {
+                        if (request.message() == null || request.message().isBlank()) {
+                            throw new IllegalArgumentException("聊天消息不能为空");
+                        }
+                        chatHandler.processMessage(userId, request.message(), normalizeLocale(request.locale()), session);
                         return;
                     }
                     
                     // 其他JSON消息当作普通消息处理
                     logger.debug("收到JSON格式的聊天消息，当作普通消息处理");
-                } catch (Exception jsonParseError) {
-                    // JSON解析失败，当作普通文本消息处理
-                    logger.debug("JSON解析失败，当作普通消息处理: {}", jsonParseError.getMessage());
                 }
             }
                 
             // 普通聊天消息处理（保持向下兼容）
-            chatHandler.processMessage(userId, payload, session);
+            chatHandler.processMessage(userId, payload, DEFAULT_LOCALE, session);
             
         } catch (Exception e) {
             logger.error("处理消息出错，用户ID: {}，会话ID: {}，错误: {}", 
@@ -150,6 +163,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         logger.debug("从JWT令牌中提取的用户ID: {}", userId);
         return userId;
+    }
+
+    private String normalizeLocale(String locale) {
+        return ENGLISH_LOCALE.equals(locale) ? ENGLISH_LOCALE : DEFAULT_LOCALE;
     }
 
     private String extractToken(WebSocketSession session) {

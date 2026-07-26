@@ -4,6 +4,7 @@ import { nextTick } from 'vue';
 import { router } from '@/router';
 import { request } from '@/service/request';
 import { formatDate } from '@/utils/common';
+import { $t } from '@/locales';
 import { VueMarkdownIt } from '@/vendor/vue-markdown-shiki';
 defineOptions({ name: 'ChatMessage' });
 
@@ -17,7 +18,7 @@ const authStore = useAuthStore();
 
 function handleCopy(content: string) {
   navigator.clipboard.writeText(content);
-  window.$message?.success('已复制');
+  window.$message?.success($t('page.chat.message.copySuccess'));
 }
 
 const chatStore = useChatStore();
@@ -59,37 +60,40 @@ async function handleFeedback(message: Api.Chat.Message, rating: 'good' | 'bad')
   };
 
   if (error) {
-    window.$message?.error('反馈记录失败');
+    window.$message?.error($t('page.chat.message.feedbackError'));
     return;
   }
 
   message.feedbackRating = rating;
-  window.$message?.success(rating === 'good' ? '已记录点赞反馈' : '已记录点踩反馈');
+  window.$message?.success(
+    rating === 'good' ? $t('page.chat.message.feedbackGood') : $t('page.chat.message.feedbackBad')
+  );
 }
 
 // 存储文件名和对应的事件处理
 const sourceFiles = ref<Array<{fileName: string, id: string, referenceNumber: number, fileMd5?: string, pageNumber?: number}>>([]);
-const bareUrlPattern = /https?:\/\/[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+/g;
-const toolNameLabels: Record<string, string> = {
-  search_knowledge: '检索知识库',
-  generate_summary: '生成知识摘要',
-  submit_feedback: '记录反馈',
-  knowledge_stats: '读取知识库统计'
+const bareUrlPattern = /https?:\/\/[^\s<>"“”]+/g;
+const toolNameKeys: Record<string, App.I18n.I18nKey> = {
+  search_knowledge: 'page.chat.message.tool.searchKnowledge',
+  generate_summary: 'page.chat.message.tool.generateSummary',
+  submit_feedback: 'page.chat.message.tool.submitFeedback',
+  knowledge_stats: 'page.chat.message.tool.knowledgeStats'
 };
-const toolStatusLabels: Record<Api.Chat.AgentToolEvent['status'], string> = {
-  executing: '执行中',
-  success: '已完成',
-  failed: '失败'
+const toolStatusKeys: Record<Api.Chat.AgentToolEvent['status'], App.I18n.I18nKey> = {
+  executing: 'page.chat.message.tool.executing',
+  success: 'page.chat.message.tool.success',
+  failed: 'page.chat.message.tool.failed'
 };
 
 const toolEvents = computed(() => props.msg.toolEvents || []);
 
 function getToolLabel(tool: string) {
-  return toolNameLabels[tool] || tool;
+  const key = toolNameKeys[tool];
+  return key ? $t(key) : tool;
 }
 
 function getToolStatusLabel(status: Api.Chat.AgentToolEvent['status']) {
-  return toolStatusLabels[status] || status;
+  return $t(toolStatusKeys[status]);
 }
 
 function splitTrailingUrlPunctuation(rawUrl: string) {
@@ -148,7 +152,7 @@ function createSourceLink(
   const linkClass = 'source-file-link';
   const trimmedFileName = fileName.trim();
   const fileId = `source-file-${sourceFiles.value.length}`;
-  const referenceNumber = parseInt(sourceNum, 10);
+  const referenceNumber = Number.parseInt(sourceNum, 10);
 
   sourceFiles.value.push({
     fileName: trimmedFileName,
@@ -158,7 +162,8 @@ function createSourceLink(
     pageNumber: extras?.pageNumber
   });
 
-  return `来源#${sourceNum}: <span class="${linkClass}" data-file-id="${fileId}">${extras?.displayName || trimmedFileName}</span>`;
+  const sourceLabel = $t('page.chat.message.source', { number: sourceNum });
+  return `${sourceLabel}: <span class="${linkClass}" data-file-id="${fileId}">${extras?.displayName || trimmedFileName}</span>`;
 }
 
 // 处理来源文件链接的函数
@@ -169,33 +174,38 @@ function processSourceLinks(text: string): string {
   // 支持单个来源，也支持一个括号里包含多个来源：
   // (来源#1: test.pdf | 第5页; 来源#2: other.pdf | 第8页)
   const entryBoundary = '(?=\\s*(?:[;；,，、。！？!?\\)）]|$))';
+  const sourcePattern = '(?:来源|Source)\\s*#';
   const pagePattern = new RegExp(
-    `来源#(\\d+):\\s*([^|;；,，、。！？!?\\n\\r]+?)\\s*\\|\\s*第(\\d+)页${entryBoundary}`,
-    'g'
+    `${sourcePattern}(\\d+):\\s*([^|;；,，、。！？!?\\n\\r]+?)\\s*\\|\\s*(?:第\\s*(\\d+)\\s*页|Page\\s*(\\d+))${entryBoundary}`,
+    'gi'
   );
   const md5Pattern = new RegExp(
-    `来源#(\\d+):\\s*([^|;；,，、。！？!?\\n\\r]+?)\\s*\\|\\s*MD5:\\s*([a-fA-F0-9]+)${entryBoundary}`,
-    'g'
+    `${sourcePattern}(\\d+):\\s*([^|;；,，、。！？!?\\n\\r]+?)\\s*\\|\\s*MD5:\\s*([a-fA-F0-9]+)${entryBoundary}`,
+    'gi'
   );
   const simplePattern = new RegExp(
-    `来源#(\\d+):\\s*([^<>\\n\\r|;；,，、。！？!?]+?)${entryBoundary}`,
-    'g'
+    `${sourcePattern}(\\d+):\\s*([^<>\\n\\r|;；,，、。！？!?]+?)${entryBoundary}`,
+    'gi'
   );
 
-  let processedText = text.replace(pagePattern, (_match, sourceNum, fileName, pageNum) => {
+  let processedText = text.replace(pagePattern, (...matchParts) => {
+    const [, sourceNum, fileName, zhPageNum, enPageNum] = matchParts;
+    const pageNum = zhPageNum || enPageNum;
     return createSourceLink(sourceNum, fileName, {
-      pageNumber: parseInt(pageNum, 10),
-      displayName: `${fileName.trim()} (第${pageNum}页)`
+      pageNumber: Number.parseInt(pageNum, 10),
+      displayName: `${fileName.trim()} (${$t('page.chat.message.page', { number: pageNum })})`
     });
   });
 
-  processedText = processedText.replace(md5Pattern, (_match, sourceNum, fileName, fileMd5) => {
+  processedText = processedText.replace(md5Pattern, (...matchParts) => {
+    const [, sourceNum, fileName, fileMd5] = matchParts;
     return createSourceLink(sourceNum, fileName, {
       fileMd5: fileMd5.trim()
     });
   });
 
-  processedText = processedText.replace(simplePattern, (_match, sourceNum, fileName) => {
+  processedText = processedText.replace(simplePattern, (...matchParts) => {
+    const [, sourceNum, fileName] = matchParts;
     return createSourceLink(sourceNum, fileName);
   });
 
@@ -219,7 +229,7 @@ function extractContextAnchorText(target: HTMLElement) {
   const rawText = scope?.textContent?.replace(/\s+/g, ' ').trim() || '';
   if (!rawText) return '';
 
-  const beforeCitation = rawText.split(/(?:\(|（)?来源#\d+:/)[0] || rawText;
+  const beforeCitation = rawText.split(/(?:\(|（)?(?:来源|Source)\s*#\d+:/i)[0] || rawText;
   return beforeCitation
     .replace(/^\s*\d+\.\s*/, '')
     .replace(/[（(]\s*$/, '')
@@ -349,7 +359,7 @@ async function handleSourceFileClick(fileInfo: {
     });
   } catch (err) {
     console.error('文件下载失败:', err);
-    window.$message?.error(`文件下载失败: ${fileName}`);
+    window.$message?.error($t('page.chat.message.downloadError', { fileName }));
   }
 }
 </script>
@@ -370,7 +380,7 @@ async function handleSourceFileClick(fileInfo: {
         <SystemLogo class="text-6 text-white" />
       </NAvatar>
       <div class="flex-col gap-1">
-        <NText class="text-4 font-bold">RAG知识库</NText>
+        <NText class="text-4 font-bold">{{ $t('system.title') }}</NText>
         <NText class="text-3 color-gray-500">{{ formatDate(msg.timestamp) }}</NText>
       </div>
     </div>
@@ -392,7 +402,7 @@ async function handleSourceFileClick(fileInfo: {
       <icon-eos-icons:three-dots-loading class="ml-12 mt-2 text-8" />
     </NText>
     <NText v-else-if="msg.status === 'error'" class="ml-12 mt-2 italic color-#d03050">
-      {{ msg.content || '服务器繁忙，请稍后再试' }}
+      {{ msg.content || $t('page.chat.message.fallbackError') }}
     </NText>
     <div v-else-if="msg.role === 'assistant'" class="mt-2 pl-12" @click="handleContentClick">
       <VueMarkdownIt :content="content" />
@@ -400,7 +410,12 @@ async function handleSourceFileClick(fileInfo: {
     <NText v-else-if="msg.role === 'user'" class="ml-12 mt-2 text-4">{{ content }}</NText>
     <NDivider class="ml-12 w-[calc(100%-3rem)] mb-0! mt-2!" />
     <div class="ml-12 flex gap-2">
-      <NButton quaternary title="复制回答" aria-label="复制回答" @click="handleCopy(msg.content)">
+      <NButton
+        quaternary
+        :title="$t('page.chat.message.copy')"
+        :aria-label="$t('page.chat.message.copy')"
+        @click="handleCopy(msg.content)"
+      >
         <template #icon>
           <icon-mynaui:copy />
         </template>
@@ -408,8 +423,8 @@ async function handleSourceFileClick(fileInfo: {
       <NButton
         v-if="msg.role === 'assistant'"
         quaternary
-        title="点赞"
-        aria-label="点赞"
+        :title="$t('page.chat.message.like')"
+        :aria-label="$t('page.chat.message.like')"
         :type="msg.feedbackRating === 'good' ? 'primary' : 'default'"
         :loading="feedbackSubmitting[getMessageFeedbackKey(msg)]"
         @click="handleFeedback(msg, 'good')"
@@ -421,8 +436,8 @@ async function handleSourceFileClick(fileInfo: {
       <NButton
         v-if="msg.role === 'assistant'"
         quaternary
-        title="点踩"
-        aria-label="点踩"
+        :title="$t('page.chat.message.dislike')"
+        :aria-label="$t('page.chat.message.dislike')"
         :type="msg.feedbackRating === 'bad' ? 'error' : 'default'"
         :loading="feedbackSubmitting[getMessageFeedbackKey(msg)]"
         @click="handleFeedback(msg, 'bad')"

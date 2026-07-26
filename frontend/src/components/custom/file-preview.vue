@@ -9,8 +9,8 @@
             <NSpin size="large" />
           </div>
           <div class="state-copy">
-            <strong>正在装载引用文档</strong>
-            <span>整理线索、页码定位和可预览内容。</span>
+            <strong>{{ $t('component.filePreview.loadingTitle') }}</strong>
+            <span>{{ $t('component.filePreview.loadingHint') }}</span>
           </div>
         </div>
       </template>
@@ -20,7 +20,7 @@
             <icon-mdi-alert-circle class="text-34" />
           </div>
           <div class="state-copy">
-            <strong>这份文档暂时没能打开</strong>
+            <strong>{{ $t('component.filePreview.openFailed') }}</strong>
             <span>{{ error }}</span>
           </div>
         </div>
@@ -51,40 +51,40 @@
                   <template #icon>
                     <icon-mdi-open-in-new />
                   </template>
-                  新窗口
+                  {{ $t('component.filePreview.newWindow') }}
                 </NButton>
                 <NButton size="small" secondary @click="downloadFile" :loading="downloading">
                   <template #icon>
                     <icon-mdi-download />
                   </template>
-                  下载
+                  {{ $t('component.filePreview.download') }}
                 </NButton>
                 <NButton size="small" quaternary @click="closePreview">
                   <template #icon>
                     <icon-mdi-close />
                   </template>
-                  关闭
+                  {{ $t('component.filePreview.close') }}
                 </NButton>
               </div>
             </section>
 
             <section class="info-card info-card--hero">
-              <span class="info-label">概览</span>
+              <span class="info-label">{{ $t('component.filePreview.overview') }}</span>
               <strong class="info-title">{{ heroHeadline }}</strong>
               <p class="info-copy">{{ heroDescription }}</p>
               <div v-if="retrievalQuery" class="info-inline-block">
-                <span class="info-label">检索问题</span>
+                <span class="info-label">{{ $t('component.filePreview.retrievalQuery') }}</span>
                 <p class="support-copy">{{ retrievalQuery }}</p>
               </div>
             </section>
 
             <section v-if="evidenceSnippet" class="info-card">
-              <span class="info-label">线索</span>
+              <span class="info-label">{{ $t('component.filePreview.clue') }}</span>
               <p class="support-copy">{{ evidenceSnippet }}</p>
             </section>
 
             <section v-else-if="resolvedHighlightAnchor" class="info-card">
-              <span class="info-label">定位线索</span>
+              <span class="info-label">{{ $t('component.filePreview.locationClue') }}</span>
               <p class="support-copy">{{ resolvedHighlightAnchor }}</p>
             </section>
 
@@ -123,21 +123,21 @@
                     <SvgIcon :local-icon="getFileIcon(fileName)" class="text-28" />
                   </div>
                   <div class="state-copy">
-                    <strong>当前格式暂不支持在线预览</strong>
-                    <span>你可以先下载文件，或在新窗口中尝试打开原始资源。</span>
+                    <strong>{{ $t('component.filePreview.unsupported') }}</strong>
+                    <span>{{ $t('component.filePreview.unsupportedHint') }}</span>
                   </div>
                   <div class="placeholder-actions">
                     <NButton secondary @click="openPreviewInNewTab" :disabled="!canOpenInNewTab">
                       <template #icon>
                         <icon-mdi-open-in-new />
                       </template>
-                      新窗口打开
+                      {{ $t('component.filePreview.openNewWindow') }}
                     </NButton>
                     <NButton type="primary" @click="downloadFile">
                       <template #icon>
                         <icon-mdi-download />
                       </template>
-                      下载后查看
+                      {{ $t('component.filePreview.downloadToView') }}
                     </NButton>
                   </div>
                 </div>
@@ -156,8 +156,9 @@ import { NButton, NSpin } from 'naive-ui';
 import { request } from '@/service/request';
 import { getFileExt } from '@/utils/common';
 import { getServiceBaseURL } from '@/utils/service';
-import PdfDocumentViewer from '@/components/custom/pdf-document-viewer.vue';
+import { $t } from '@/locales';
 import SvgIcon from '@/components/custom/svg-icon.vue';
+import PdfDocumentViewer from '@/components/custom/pdf-document-viewer.vue';
 
 interface Props {
   fileName: string;
@@ -202,10 +203,10 @@ const fileExtensionLabel = computed(() => {
 });
 const fallbackRetrievalLabel = computed(() => {
   if (props.retrievalMode === 'TEXT_ONLY') {
-    return '关键词召回';
+    return $t('component.filePreview.keywordRetrieval');
   }
   if (props.retrievalMode === 'HYBRID') {
-    return '混合召回（语义相关 + 关键词）';
+    return $t('component.filePreview.hybridRetrieval');
   }
   return '';
 });
@@ -223,40 +224,61 @@ const displayScore = computed(() => {
   return props.score.toFixed(3);
 });
 const displayPage = computed(() => sourcePageNumber.value || props.pageNumber || undefined);
-const displayPageLabel = computed(() => (displayPage.value ? `第 ${displayPage.value} 页` : ''));
-const displayScoreLabel = computed(() => (displayScore.value ? `相关分数 ${displayScore.value}` : ''));
+const displayPageLabel = computed(() =>
+  displayPage.value ? $t('component.filePreview.page', { number: displayPage.value }) : ''
+);
 const headerMetaLine = computed(() => {
   if (previewType.value === 'pdf') {
-    return [displayPageLabel.value, displayScore.value ? `分数 ${displayScore.value}` : ''].filter(Boolean).join(' / ');
+    return [
+      displayPageLabel.value,
+      displayScore.value ? $t('component.filePreview.score', { score: displayScore.value }) : ''
+    ]
+      .filter(Boolean)
+      .join(' / ');
   }
   if (previewType.value === 'image') {
-    return [fileExtensionLabel.value, displayScore.value ? `分数 ${displayScore.value}` : ''].filter(Boolean).join(' / ');
+    return [
+      fileExtensionLabel.value,
+      displayScore.value ? $t('component.filePreview.score', { score: displayScore.value }) : ''
+    ]
+      .filter(Boolean)
+      .join(' / ');
   }
   if (previewType.value === 'text') {
-    return [fileExtensionLabel.value, displayScore.value ? `分数 ${displayScore.value}` : ''].filter(Boolean).join(' / ');
+    return [
+      fileExtensionLabel.value,
+      displayScore.value ? $t('component.filePreview.score', { score: displayScore.value }) : ''
+    ]
+      .filter(Boolean)
+      .join(' / ');
   }
-  return [fileExtensionLabel.value, displayScore.value ? `分数 ${displayScore.value}` : ''].filter(Boolean).join(' / ');
+  return [
+    fileExtensionLabel.value,
+    displayScore.value ? $t('component.filePreview.score', { score: displayScore.value }) : ''
+  ]
+    .filter(Boolean)
+    .join(' / ');
 });
 const heroHeadline = computed(() => {
   if (props.retrievalLabel || fallbackRetrievalLabel.value) {
     return props.retrievalLabel || fallbackRetrievalLabel.value;
   }
   if (previewType.value === 'pdf') {
-    return '文档已定位到可阅读页';
+    return $t('component.filePreview.pdfReady');
   }
-  return '已就绪的引用文档';
+  return $t('component.filePreview.referenceReady');
 });
 const heroDescription = computed(() => {
   if (props.retrievalQuery) {
-    return '左侧展示的是本次 RAG 检索的问题与定位线索，右侧则直接打开原始文档，方便核对答案依据。';
+    return $t('component.filePreview.descriptionQuery');
   }
   if (props.evidenceSnippet) {
-    return '左侧展示的是这次检索的定位线索，右侧则直接打开原始文档，方便核对答案依据。';
+    return $t('component.filePreview.descriptionEvidence');
   }
   if (resolvedHighlightAnchor.value) {
-    return '当前预览会优先围绕这条上下文线索定位，方便你核对答案和原文是否一致。';
+    return $t('component.filePreview.descriptionAnchor');
   }
-  return '这里展示的是引用来源的原始文档内容，你可以直接浏览、下载或在新窗口中打开。';
+  return $t('component.filePreview.descriptionDefault');
 });
 const canOpenInNewTab = computed(() => Boolean(resolvedSourceUrl.value || resolvedPreviewUrl.value));
 
@@ -366,7 +388,9 @@ async function loadPreviewContent() {
       });
 
       if (requestError) {
-        error.value = '预览失败：' + (requestError.message || '未知错误');
+        error.value = $t('component.filePreview.previewFailed', {
+          message: requestError.message || $t('component.filePreview.unknownError')
+        });
       } else if (data) {
         previewType.value = data.previewType || 'download';
         content.value = data.content || '';
@@ -409,7 +433,9 @@ async function loadPreviewContent() {
       });
 
       if (requestError) {
-        error.value = '预览失败：' + (requestError.message || '未知错误');
+        error.value = $t('component.filePreview.previewFailed', {
+          message: requestError.message || $t('component.filePreview.unknownError')
+        });
       } else if (data) {
         previewType.value = data.previewType || 'download';
         content.value = data.content || '';
@@ -420,7 +446,9 @@ async function loadPreviewContent() {
       }
     }
   } catch (err: any) {
-    error.value = '预览失败：' + (err.message || '网络错误');
+    error.value = $t('component.filePreview.previewFailed', {
+      message: err.message || $t('component.filePreview.networkError')
+    });
   } finally {
     loading.value = false;
   }
@@ -448,7 +476,11 @@ async function downloadFile() {
       });
 
       if (requestError) {
-        window.$message?.error('下载失败：' + (requestError.message || '未知错误'));
+        window.$message?.error(
+          $t('component.filePreview.downloadFailed', {
+            message: requestError.message || $t('component.filePreview.unknownError')
+          })
+        );
       } else if (data) {
         // 使用预签名URL下载文件
         const link = document.createElement('a');
@@ -457,7 +489,7 @@ async function downloadFile() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        window.$message?.success('开始下载文件');
+        window.$message?.success($t('component.filePreview.downloadStarted'));
       }
     } else {
       // 降级：使用文件名下载（向后兼容）
@@ -473,7 +505,11 @@ async function downloadFile() {
       });
 
       if (requestError) {
-        window.$message?.error('下载失败：' + (requestError.message || '未知错误'));
+        window.$message?.error(
+          $t('component.filePreview.downloadFailed', {
+            message: requestError.message || $t('component.filePreview.unknownError')
+          })
+        );
       } else if (data) {
         // 使用预签名URL下载文件
         const link = document.createElement('a');
@@ -482,11 +518,15 @@ async function downloadFile() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        window.$message?.success('开始下载文件');
+        window.$message?.success($t('component.filePreview.downloadStarted'));
       }
     }
   } catch (err: any) {
-    window.$message?.error('下载失败：' + (err.message || '网络错误'));
+    window.$message?.error(
+      $t('component.filePreview.downloadFailed', {
+        message: err.message || $t('component.filePreview.networkError')
+      })
+    );
   } finally {
     downloading.value = false;
   }

@@ -1,5 +1,6 @@
 import { useWebSocket } from '@vueuse/core';
 import { request } from '@/service/request';
+import { $t } from '@/locales';
 
 export const useChatStore = defineStore(SetupStoreId.Chat, () => {
   const NON_RETRYABLE_CLOSE_CODES = new Set([1002, 1003, 1007, 1008]);
@@ -253,7 +254,7 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
       delay: 1500,
       onFailed: () => {
         if (allowReconnect.value && socketUrl.value) {
-          window.$message?.warning('WebSocket 重连失败，请检查网络或刷新页面后重试');
+          window.$message?.warning($t('page.chat.input.reconnectFailed'));
         }
       }
     },
@@ -273,7 +274,7 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
       allowReconnect.value = !isAuthOrProtocolFailure;
       if (isAuthOrProtocolFailure && !authFailureNotified.value) {
         authFailureNotified.value = true;
-        window.$message?.error('聊天连接鉴权失败，请重新登录后再试');
+        window.$message?.error($t('page.chat.input.authFailed'));
       }
     }
   });

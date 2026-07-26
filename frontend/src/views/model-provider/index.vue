@@ -1,6 +1,7 @@
 <script setup lang="tsx">
 import { onMounted, ref } from 'vue';
 import { NButton, NCard, NEmpty } from 'naive-ui';
+import { $t } from '@/locales';
 
 const modelProvidersLoading = ref(false);
 const modelProvidersSaving = ref(false);
@@ -81,7 +82,9 @@ async function submitModelProviders(scopeKey: 'llm' | 'embedding') {
 
   if (!error && data && modelProviders.value) {
     modelProviders.value[scopeKey] = cloneModelProviderScope(data);
-    window.$message?.success(scopeKey === 'llm' ? 'LLM 模型配置已更新' : 'Embedding 配置已更新');
+    window.$message?.success(
+      scopeKey === 'llm' ? $t('page.modelProvider.llmUpdated') : $t('page.modelProvider.embeddingUpdated')
+    );
   }
   modelProvidersSaving.value = false;
 }
@@ -101,9 +104,13 @@ async function testModelProvider(scopeKey: 'llm' | 'embedding', provider: Api.Ad
 
   if (!error && data) {
     if (data.success) {
-      window.$message?.success(`${provider.displayName} 连接成功，耗时 ${data.latencyMs}ms`);
+      window.$message?.success(
+        $t('page.modelProvider.connectionSuccess', { provider: provider.displayName, latency: data.latencyMs })
+      );
     } else {
-      window.$message?.error(`${provider.displayName} 连接失败：${data.message}`);
+      window.$message?.error(
+        $t('page.modelProvider.connectionFailed', { provider: provider.displayName, message: data.message })
+      );
     }
   }
 }
@@ -116,16 +123,16 @@ onMounted(() => {
 <template>
   <div class="min-h-500px flex-col-stretch gap-16px overflow-auto">
     <NCard :bordered="false" size="small" class="card-wrapper">
-      <template #header>模型 Provider 配置</template>
+      <template #header>{{ $t('page.modelProvider.title') }}</template>
       <template #header-extra>
         <div class="flex items-center gap-2">
-          <span class="text-xs text-stone-400">LLM 保存后新请求立即生效，Embedding 暂不允许危险直切</span>
+          <span class="text-xs text-stone-400">{{ $t('page.modelProvider.immediateHint') }}</span>
         </div>
       </template>
 
       <NSpin :show="modelProvidersLoading">
         <div class="mb-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-500">
-          这里管理平台代付的模型接入配置。API Key 输入为空时保留现有密钥，不会回显明文。Embedding 如果切换 active provider，后端会拦截需要重嵌入的危险变更。
+          {{ $t('page.modelProvider.description') }}
         </div>
 
         <div v-if="modelProviders" class="grid gap-4">
@@ -133,7 +140,7 @@ onMounted(() => {
             <div class="provider-scope-header">
               <div>
                 <div class="provider-scope-title">LLM Provider</div>
-                <div class="provider-scope-sub">聊天请求会按当前 active provider 路由</div>
+                <div class="provider-scope-sub">{{ $t('page.modelProvider.llmRouteHint') }}</div>
               </div>
               <div class="flex items-center gap-3">
                 <NSelect
@@ -142,7 +149,7 @@ onMounted(() => {
                   class="min-w-180px"
                 />
                 <NButton type="primary" size="small" :loading="modelProvidersSaving" @click="submitModelProviders('llm')">
-                  保存 LLM 配置
+                  {{ $t('page.modelProvider.saveLlm') }}
                 </NButton>
               </div>
             </div>
@@ -158,24 +165,24 @@ onMounted(() => {
                 </div>
                 <div class="limit-grid">
                   <div>
-                    <div class="limit-label">API 地址</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.apiAddress') }}</div>
                     <NInput v-model:value="item.apiBaseUrl" />
                   </div>
                   <div>
-                    <div class="limit-label">模型</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.model') }}</div>
                     <NInput v-model:value="item.model" />
                   </div>
                   <div>
-                    <div class="limit-label">现有密钥</div>
-                    <div class="provider-mask">{{ item.hasApiKey ? item.maskedApiKey : '未配置' }}</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.existingKey') }}</div>
+                    <div class="provider-mask">{{ item.hasApiKey ? item.maskedApiKey : $t('page.modelProvider.notConfigured') }}</div>
                   </div>
                   <div>
-                    <div class="limit-label">新 API Key</div>
-                    <NInput v-model:value="item.apiKeyInput" type="password" show-password-on="click" placeholder="留空则保留现有值" />
+                    <div class="limit-label">{{ $t('page.modelProvider.newApiKey') }}</div>
+                    <NInput v-model:value="item.apiKeyInput" type="password" show-password-on="click" :placeholder="$t('page.modelProvider.keepExistingKey')" />
                   </div>
                 </div>
                 <div class="mt-3 flex justify-end">
-                  <NButton size="small" secondary @click="testModelProvider('llm', item)">测试连接</NButton>
+                  <NButton size="small" secondary @click="testModelProvider('llm', item)">{{ $t('page.modelProvider.testConnection') }}</NButton>
                 </div>
               </div>
             </div>
@@ -185,7 +192,7 @@ onMounted(() => {
             <div class="provider-scope-header">
               <div>
                 <div class="provider-scope-title">Embedding Provider</div>
-                <div class="provider-scope-sub">当前版本只支持配置管理；切 active provider 若需要重嵌入会被后端拦截</div>
+                <div class="provider-scope-sub">{{ $t('page.modelProvider.embeddingRouteHint') }}</div>
               </div>
               <div class="flex items-center gap-3">
                 <NSelect
@@ -194,7 +201,7 @@ onMounted(() => {
                   class="min-w-180px"
                 />
                 <NButton type="primary" size="small" :loading="modelProvidersSaving" @click="submitModelProviders('embedding')">
-                  保存 Embedding 配置
+                  {{ $t('page.modelProvider.saveEmbedding') }}
                 </NButton>
               </div>
             </div>
@@ -210,34 +217,34 @@ onMounted(() => {
                 </div>
                 <div class="limit-grid">
                   <div>
-                    <div class="limit-label">API 地址</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.apiAddress') }}</div>
                     <NInput v-model:value="item.apiBaseUrl" />
                   </div>
                   <div>
-                    <div class="limit-label">模型</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.model') }}</div>
                     <NInput v-model:value="item.model" />
                   </div>
                   <div>
-                    <div class="limit-label">维度</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.dimension') }}</div>
                     <NInputNumber v-model:value="item.dimension" :min="1" class="w-full" />
                   </div>
                   <div>
-                    <div class="limit-label">现有密钥</div>
-                    <div class="provider-mask">{{ item.hasApiKey ? item.maskedApiKey : '未配置' }}</div>
+                    <div class="limit-label">{{ $t('page.modelProvider.existingKey') }}</div>
+                    <div class="provider-mask">{{ item.hasApiKey ? item.maskedApiKey : $t('page.modelProvider.notConfigured') }}</div>
                   </div>
                   <div class="sm:col-span-2">
-                    <div class="limit-label">新 API Key</div>
-                    <NInput v-model:value="item.apiKeyInput" type="password" show-password-on="click" placeholder="留空则保留现有值" />
+                    <div class="limit-label">{{ $t('page.modelProvider.newApiKey') }}</div>
+                    <NInput v-model:value="item.apiKeyInput" type="password" show-password-on="click" :placeholder="$t('page.modelProvider.keepExistingKey')" />
                   </div>
                 </div>
                 <div class="mt-3 flex justify-end">
-                  <NButton size="small" secondary @click="testModelProvider('embedding', item)">测试连接</NButton>
+                  <NButton size="small" secondary @click="testModelProvider('embedding', item)">{{ $t('page.modelProvider.testConnection') }}</NButton>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <NEmpty v-else size="small" description="暂未加载到模型配置" />
+        <NEmpty v-else size="small" :description="$t('page.modelProvider.empty')" />
       </NSpin>
     </NCard>
   </div>
