@@ -76,3 +76,4 @@ src/main/resources/cert
 
 # Claude Code 本地权限文件(可能包含本机命令中的敏感信息,勿提交)
 .claude/settings.local.json
+CLAUDE.md
