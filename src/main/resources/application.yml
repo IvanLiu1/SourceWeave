@@ -214,6 +214,29 @@ rerank:
     key: ${RERANK_API_KEY:${EMBEDDING_API_KEY:}}
     model: ${RERANK_API_MODEL:gte-rerank-v2}
 
+rag:
+  evaluation:
+    # 显式开启后才运行；普通服务启动绝不会导入数据或调用评测模型。
+    enabled: ${RAG_EVALUATION_ENABLED:false}
+    # prepare=只建独立索引，run=只生成预测，all=依次执行。
+    mode: ${RAG_EVALUATION_MODE:all}
+    dataset-dir: ${RAG_EVALUATION_DATASET_DIR:evaluation/datasets/rag-eval-en-v1}
+    output-dir: ${RAG_EVALUATION_OUTPUT_DIR:evaluation/runs/rag-eval-en-v1}
+    # 删除索引仅允许 sourceweave_eval_ 前缀，防止误伤业务知识库。
+    index-name: ${RAG_EVALUATION_INDEX_NAME:sourceweave_eval_rag_en_v1}
+    reset-index: ${RAG_EVALUATION_RESET_INDEX:false}
+    overwrite-output: ${RAG_EVALUATION_OVERWRITE_OUTPUT:false}
+    generate-answers: ${RAG_EVALUATION_GENERATE_ANSWERS:true}
+    exit-on-completion: ${RAG_EVALUATION_EXIT_ON_COMPLETION:true}
+    max-cases: ${RAG_EVALUATION_MAX_CASES:0}
+    candidate-size: 50
+    top-k: 5
+    index-batch-size: ${RAG_EVALUATION_INDEX_BATCH_SIZE:50}
+    answer-max-tokens: ${RAG_EVALUATION_ANSWER_MAX_TOKENS:200}
+    answer-timeout-seconds: ${RAG_EVALUATION_ANSWER_TIMEOUT_SECONDS:90}
+    requester-id: system-evaluation
+    git-commit: ${RAG_EVALUATION_GIT_COMMIT:unknown}
+
 ai:
   prompt:
     rules: |

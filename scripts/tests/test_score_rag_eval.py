@@ -106,6 +106,7 @@ class ScoreRagEvalTest(unittest.TestCase):
         self.assertEqual(1.0, rerank["CitationRecall"])
         self.assertEqual(1.0, rerank["JointAccuracy"])
         self.assertEqual(1.0, report["variants"]["baseline"]["squad2"]["AbstentionAccuracy"])
+        self.assertEqual(0.0, report["variants"]["baseline"]["latency"]["generationParseErrorRate"])
 
         recall_delta = report["pairedDeltas"]["hotpotqa"]["Recall@5"]
         self.assertEqual(0.5, recall_delta["absoluteDelta"])
@@ -131,6 +132,13 @@ class ScoreRagEvalTest(unittest.TestCase):
         with self.assertRaisesRegex(EvaluationError, "baseline Top 5"):
             build_report(self.cases, self.corpus, predictions, bootstrap_iterations=10)
 
+    def test_rejects_citation_outside_reported_top_five(self):
+        predictions = copy.deepcopy(self.predictions)
+        predictions[0]["citedPassageIds"] = ["passage-10"]
+
+        with self.assertRaisesRegex(EvaluationError, "citations must come from the reported Top 5"):
+            build_report(self.cases, self.corpus, predictions, bootstrap_iterations=10)
+
     def test_official_style_answer_normalization(self):
         self.assertEqual(1.0, exact_match("An author!", ["the author"]))
         self.assertEqual(1.0, answer_f1("An author!", "the author"))
@@ -147,6 +155,8 @@ class ScoreRagEvalTest(unittest.TestCase):
             "latencyMs": 100.0 if variant == "baseline" else 125.0,
             "rerankLatencyMs": 0.0 if variant == "baseline" else 25.0,
             "rerankFallback": False,
+            "answerGenerated": True,
+            "generationParseError": False,
         }
 
 

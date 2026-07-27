@@ -206,6 +206,9 @@ def validate_inputs(
 
         if cases_by_id[case_id]["dataset"] == "hotpotqa":
             validate_candidates(cases_by_id[case_id], prediction, corpus_ids)
+            retrieved = prediction["retrievedPassageIds"]
+            if any(passage_id not in retrieved for passage_id in citations):
+                raise EvaluationError(f"{case_id}/{variant}: citations must come from the reported Top 5")
 
     paired = set(PAIRED_VARIANTS).issubset(variants)
     paired_case_count = 0
@@ -298,19 +301,50 @@ def score_squad_case(prediction: dict[str, Any]) -> dict[str, float]:
 
 def latency_summary(predictions: list[dict[str, Any]]) -> dict[str, float | int | None]:
     latencies = [float(row["latencyMs"]) for row in predictions if isinstance(row.get("latencyMs"), (int, float))]
+    retrieval_latencies = [
+        float(row["retrievalLatencyMs"])
+        for row in predictions
+        if isinstance(row.get("retrievalLatencyMs"), (int, float))
+    ]
     rerank_latencies = [
         float(row["rerankLatencyMs"])
         for row in predictions
         if isinstance(row.get("rerankLatencyMs"), (int, float))
     ]
+    generation_latencies = [
+        float(row["generationLatencyMs"])
+        for row in predictions
+        if isinstance(row.get("generationLatencyMs"), (int, float))
+    ]
+    prompt_tokens = [
+        int(row["promptTokens"])
+        for row in predictions
+        if isinstance(row.get("promptTokens"), int) and not isinstance(row.get("promptTokens"), bool)
+    ]
+    completion_tokens = [
+        int(row["completionTokens"])
+        for row in predictions
+        if isinstance(row.get("completionTokens"), int) and not isinstance(row.get("completionTokens"), bool)
+    ]
     fallback_rows = [row for row in predictions if isinstance(row.get("rerankFallback"), bool)]
+    generated_rows = [row for row in predictions if row.get("answerGenerated") is True]
+    parse_error_rows = [row for row in generated_rows if isinstance(row.get("generationParseError"), bool)]
     return {
         "sampleCount": len(latencies),
         "latencyMsP50": percentile(latencies, 0.50),
         "latencyMsP95": percentile(latencies, 0.95),
+        "retrievalLatencyMsP50": percentile(retrieval_latencies, 0.50),
+        "retrievalLatencyMsP95": percentile(retrieval_latencies, 0.95),
         "rerankLatencyMsP50": percentile(rerank_latencies, 0.50),
         "rerankLatencyMsP95": percentile(rerank_latencies, 0.95),
+        "generationLatencyMsP50": percentile(generation_latencies, 0.50),
+        "generationLatencyMsP95": percentile(generation_latencies, 0.95),
         "rerankFallbackRate": mean(float(row["rerankFallback"]) for row in fallback_rows),
+        "generationParseErrorRate": mean(float(row["generationParseError"]) for row in parse_error_rows),
+        "promptTokensTotal": sum(prompt_tokens),
+        "promptTokensMean": mean(prompt_tokens),
+        "completionTokensTotal": sum(completion_tokens),
+        "completionTokensMean": mean(completion_tokens),
     }
 
 
@@ -479,6 +513,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"False Answer Rate: {format_percent(squad.get('FalseAnswerRate'))}.",
                 f"- End-to-end latency p50/p95: {latency['latencyMsP50']} / {latency['latencyMsP95']} ms; "
                 f"rerank latency p50/p95: {latency['rerankLatencyMsP50']} / {latency['rerankLatencyMsP95']} ms.",
+                f"- Rerank fallback rate: {format_percent(latency['rerankFallbackRate'])}; "
+                f"generation parse-error rate: {format_percent(latency['generationParseErrorRate'])}; "
+                f"prompt tokens: {latency['promptTokensTotal']}.",
                 "",
             ]
         )

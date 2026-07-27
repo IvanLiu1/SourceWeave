@@ -108,14 +108,74 @@ python3 scripts/score_rag_eval.py \
 The scorer writes machine-readable `summary.json` and resume/report-friendly `report.md`, including
 paired 95% bootstrap confidence intervals.
 
+## Run the evaluator
+
+The Java evaluator is disabled by default and uses the isolated Elasticsearch index
+`sourceweave_eval_rag_en_v1`; it never writes to `knowledge_base`. A full run performs these steps:
+
+1. validate `cases.jsonl`, `corpus.jsonl`, and the manifest;
+2. embed and index all 1,226 passages with the active embedding provider;
+3. embed all questions, then execute Elasticsearch exactly once per question for Top 50;
+4. take the original first five for `baseline` and rerank that same captured list for `rerank`;
+5. generate a temperature-zero answer for each Top 5 and append the paired JSONL rows;
+6. atomically rename the partial output and write `run-metadata.json` after complete success.
+
+First record the commit to evaluate:
+
+```bash
+git rev-parse HEAD
+```
+
+Then run the evaluator, replacing `<commit>` with that value:
+
+```bash
+mvn -q spring-boot:run \
+  -Dspring-boot.run.arguments="--server.port=0 \
+  --rag.evaluation.enabled=true \
+  --rag.evaluation.mode=all \
+  --rag.evaluation.reset-index=true \
+  --rag.evaluation.overwrite-output=true \
+  --rag.evaluation.git-commit=<commit> \
+  --knowledge.bootstrap.enabled=false \
+  --elasticsearch.init.enabled=false \
+  --admin.bootstrap.enabled=false \
+  --spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration \
+  --spring.kafka.listener.auto-startup=false"
+```
+
+The application context closes automatically after the evaluation command finishes. The full run
+uses external APIs for 1,226 passage embeddings, 150 question embeddings, 150 rerank requests, and
+300 answer-generation requests. For a cheap wiring check, add
+`--rag.evaluation.max-cases=2 --rag.evaluation.generate-answers=false`; partial-case output is only a
+smoke artifact and must not be passed off as a benchmark result.
+
+Outputs are written to `evaluation/runs/rag-eval-en-v1` by default:
+
+- `predictions.jsonl`: paired baseline/rerank rows consumed by the Python scorer;
+- `run-metadata.json`: hashes, index fingerprint, model versions, prompt version, Git commit, and run
+  configuration;
+- `predictions.jsonl.partial`: retained only when a run fails, so completed pairs can be inspected.
+
+The evaluator refuses to reuse an index unless its document count and fingerprint match the current
+corpus and embedding model. Index deletion is allowed only for names beginning with
+`sourceweave_eval_`.
+
 ## Answer correctness
 
-Evaluation responses use a parseable suffix while keeping the normal answer body:
+The evaluator asks the active LLM for one temperature-zero JSON object. For DeepSeek, it explicitly
+disables thinking mode so reasoning tokens cannot consume the short evaluation answer budget, and it
+enables the provider's JSON output mode:
 
-```text
-Answer: <short answer or INSUFFICIENT_EVIDENCE>
-Evidence: [1], [3]
+```json
+{
+  "answer": "short answer or INSUFFICIENT_EVIDENCE",
+  "citedPassageIds": ["hotpotqa-..."]
+}
 ```
+
+Only IDs from the supplied Top 5 are accepted. Invalid citations are removed and recorded through
+`generationParseError`; the scorer also rejects prediction files whose citations fall outside the
+reported Top 5.
 
 For the 120 HotpotQA cases, report:
 
