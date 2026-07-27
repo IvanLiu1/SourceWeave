@@ -1,0 +1,36 @@
+{
+  "caseCount": 150,
+  "corpusPassageCount": 1226,
+  "license": "CC BY-SA 4.0",
+  "seed": 20260727,
+  "selection": {
+    "hotpotqa": {
+      "caseCount": 120,
+      "sourceSplit": "distractor-dev",
+      "strata": {
+        "bridge:hard": 60,
+        "comparison:hard": 60
+      }
+    },
+    "squad2": {
+      "caseCount": 30,
+      "filter": "is_impossible == true",
+      "sourceSplit": "dev-v2.0"
+    }
+  },
+  "sources": {
+    "hotpotqa": {
+      "downloadUrl": "http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json",
+      "fileName": "hotpot_dev_distractor_v1.json",
+      "homepage": "https://hotpotqa.github.io/",
+      "sha256": "e3da074df24e8369009918aa5cdbdd254dadcde4c63f7569d36afd6f2268caa8"
+    },
+    "squad2": {
+      "downloadUrl": "https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json",
+      "fileName": "dev-v2.0.json",
+      "homepage": "https://rajpurkar.github.io/SQuAD-explorer/",
+      "sha256": "80a5225e94905956a6446d296ca1093975c4d3b3260f1d6c8f68bc2ab77182d8"
+    }
+  },
+  "version": "rag-eval-en-v1"
+}

@@ -202,9 +202,10 @@ agent:
     low-score-warn-threshold: ${AGENT_SEARCH_LOW_SCORE_THRESHOLD:0.4}
 
 rerank:
-  # 检索重排：召回后用 rerank 模型对候选按相关性重排、取 topK（提升召回质量）
+  # 检索重排：召回后用 rerank 模型对候选按相关性重排、取 topK（提升 TopK 排序质量）
   enabled: ${RERANK_ENABLED:true}
-  # 送入重排的候选数量（ES 召回这么多，重排后截取 topK）
+  # 固定的 ES 候选数量。无论 rerank 开关是否开启都召回这么多，
+  # baseline 按 ES 原始排序取 topK，rerank 对同一候选集重排后取 topK。
   candidate-size: ${RERANK_CANDIDATE_SIZE:50}
   timeout-seconds: ${RERANK_TIMEOUT_SECONDS:10}
   api:

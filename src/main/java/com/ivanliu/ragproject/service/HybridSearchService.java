@@ -92,12 +92,11 @@ public class HybridSearchService {
 
             logger.debug("向量生成成功，开始执行混合搜索 KNN");
 
+            final int candidateFetchSize = resolveCandidateFetchSize(topK);
             SearchResponse<EsDocument> response = esClient.search(s -> {
                         s.index(EsIndices.KNOWLEDGE_BASE);
                         // KNN 召回
-                        int recallK = topK * 30; // KNN 召回窗口
-                        // rerank 开启时多召回一批候选，重排后再截取 topK
-                        int fetchSize = rerankClient.isEnabled() ? Math.max(topK, rerankCandidateSize) : topK;
+                        int recallK = Math.max(topK * 30, candidateFetchSize); // KNN 召回窗口
                         s.knn(kn -> kn
                                 .field("vector")
                                 .queryVector(queryVector)
@@ -141,7 +140,9 @@ public class HybridSearchService {
                                         ))
                                 )
                         );
-                        s.size(fetchSize);
+                        // A/B 公平性：无论 rerank 是否开启，ES 都返回同样数量的原始候选。
+                        // 开关只影响 ES 返回后的排序/截断，不再改变召回集。
+                        s.size(candidateFetchSize);
                         return s;
                     }, EsDocument.class);
 
@@ -307,9 +308,10 @@ public class HybridSearchService {
                 return textOnlySearch(query, topK);
             }
 
+            final int candidateFetchSize = resolveCandidateFetchSize(topK);
             SearchResponse<EsDocument> response = esClient.search(s -> {
                         s.index(EsIndices.KNOWLEDGE_BASE);
-                        int recallK = topK * 30;
+                        int recallK = Math.max(topK * 30, candidateFetchSize);
                         s.knn(kn -> kn
                                 .field("vector")
                                 .queryVector(queryVector)
@@ -333,11 +335,11 @@ public class HybridSearchService {
                                         ))
                                 )
                         );
-                        s.size(topK);
+                        s.size(candidateFetchSize);
                         return s;
                     }, EsDocument.class);
 
-            return response.hits().hits().stream()
+            List<SearchResult> candidates = response.hits().hits().stream()
                     .map(hit -> {
                         assert hit.source() != null;
                         return new SearchResult(
@@ -356,6 +358,9 @@ public class HybridSearchService {
                         );
                     })
                     .toList();
+            List<SearchResult> selected = applyRerank(query, candidates, topK);
+            attachFileNames(selected);
+            return selected;
         } catch (Exception e) {
             logger.error("搜索失败", e);
             // 发生异常时尝试使用纯文本搜索作为后备方案
@@ -506,6 +511,14 @@ public class HybridSearchService {
         } catch (Exception e) {
             logger.error("补充文件名失败", e);
         }
+    }
+
+    /**
+     * 固定 ES 候选集大小，不依赖 rerank 开关。
+     * 这样 baseline 和 rerank 的差异只来自二阶段排序，可以用于可归因的消融实验。
+     */
+    private int resolveCandidateFetchSize(int topK) {
+        return Math.max(topK, rerankCandidateSize);
     }
 
     /**
