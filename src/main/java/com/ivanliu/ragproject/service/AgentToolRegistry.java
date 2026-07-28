@@ -48,6 +48,10 @@ public class AgentToolRegistry {
     @Value("${agent.search.low-score-warn-threshold:0.4}")
     private double lowScoreWarnThreshold;
 
+    /** Calibrated rerank results below this score are withheld from the answer model. */
+    @Value("${agent.search.hard-reject-threshold:0.2}")
+    private double hardRejectThreshold;
+
     public AgentToolRegistry(HybridSearchService hybridSearchService,
                              DeepSeekClient deepSeekClient,
                              StringRedisTemplate stringRedisTemplate,
@@ -113,6 +117,29 @@ public class AgentToolRegistry {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("query", query);
         data.put("topK", topK);
+        SearchQuality quality = evaluateSearchQuality(
+                results,
+                rerankClient.isEnabled(),
+                hardRejectThreshold,
+                lowScoreWarnThreshold
+        );
+        data.put("scoreCalibrated", quality.scoreCalibrated());
+        data.put("maxScore", quality.maxScore());
+        data.put("hardRejectThreshold", hardRejectThreshold);
+        if (quality.hardRejected()) {
+            data.put("results", List.of());
+            data.put("discardedResultCount", results.size());
+            return new ToolExecutionResult(
+                    "search_knowledge",
+                    true,
+                    String.format(Locale.ROOT,
+                            "LOW_CONFIDENCE: the best calibrated rerank score was %.4f, below the hard threshold %.2f. "
+                                    + "No retrieved snippet is usable as evidence, and the discarded snippets must not be cited or used to answer. "
+                                    + "Retry with a faithful query refinement at most twice; if confidence remains low, refuse to answer and ask for a clarifying detail.",
+                            quality.maxScore(), hardRejectThreshold),
+                    data
+            );
+        }
         data.put("results", results);
         // ReAct 路径会用全局起始编号重新调用 formatSearchResults，这里默认从 [1] 开始
         return new ToolExecutionResult("search_knowledge", true, formatSearchResults(results, 1), data);
@@ -278,16 +305,16 @@ public class AgentToolRegistry {
      */
     public String formatSearchResults(List<SearchResult> results, int startNumber) {
         if (results == null || results.isEmpty()) {
-            return "未检索到相关知识库片段。建议改写 query 后重试：保留用户原话中的核心实体与缩写，"
-                    + "尝试同义词、中英文名互换或展开缩写；若多次改写仍无结果，再向用户说明知识库暂无相关材料并请其补充线索。";
+            return "No usable knowledge-base snippets were found. Retry with a faithful query refinement that preserves the user's entities, acronyms, qualifiers, and polarity. "
+                    + "If at most two refinements still produce no usable evidence, refuse to answer and ask for a clarifying detail.";
         }
 
         int endNumber = startNumber + results.size() - 1;
-        StringBuilder output = new StringBuilder("检索到 ").append(results.size())
-                .append(" 个知识库片段，来源编号 [").append(startNumber).append("]-[").append(endNumber)
-                .append("]（编号跨多轮检索全局唯一，引用时使用片段前标注的编号）。")
-                .append("请基于这些片段回答用户问题；不得声称知识库暂无相关信息。")
-                .append("如果片段信息不足，请说明“基于已检索片段只能确认……”并标注来源编号。");
+        StringBuilder output = new StringBuilder("Retrieved ").append(results.size())
+                .append(" candidate knowledge-base snippets with globally unique source numbers [")
+                .append(startNumber).append("]-[").append(endNumber).append("]. ")
+                .append("Treat them as candidate evidence, not proof. Answer only when they explicitly entail every required part of the answer; otherwise refuse. ")
+                .append("Citations must use the source numbers shown below.");
         appendQualitySignal(output, results);
         for (int i = 0; i < results.size(); i++) {
             SearchResult result = results.get(i);
@@ -325,19 +352,48 @@ public class AgentToolRegistry {
             return;
         }
 
-        if (rerankClient.isEnabled()) {
+        if (hasCalibratedRerankScores(results, rerankClient.isEnabled())) {
             output.append(String.format(Locale.ROOT,
-                    "\n检索质量：最高相关性分 %.4f（rerank 校准分，范围约 0~1，越高越相关，参考阈值 %.2f）。",
+                    "\nRetrieval quality: best calibrated rerank relevance score %.4f (approximately 0-1; warning threshold %.2f).",
                     maxScore, lowScoreWarnThreshold));
             if (maxScore < lowScoreWarnThreshold) {
-                output.append("警告：全部片段相关性偏低，很可能未命中目标资料。")
-                        .append("请优先改写 query（保留核心实体与缩写，尝试同义词、中英文名互换、展开缩写）后重新调用 search_knowledge；")
-                        .append("若改写重试后仍偏低，再基于现有片段谨慎作答并明确说明依据不足。");
+                output.append(" WARNING: relevance is weak. Refine the query before answering; if confidence remains weak, refuse to answer.");
             }
         } else {
             output.append(String.format(Locale.ROOT,
-                    "\n检索质量：最高分 %.4f（未启用 rerank 校准，分数仅供同批片段相对比较）。", maxScore));
+                    "\nRetrieval quality: best uncalibrated score %.4f. Use it only for relative ordering within this result set, never as an answer-confidence threshold.",
+                    maxScore));
         }
+    }
+
+    static SearchQuality evaluateSearchQuality(List<SearchResult> results,
+                                                boolean rerankEnabled,
+                                                double hardRejectThreshold,
+                                                double warnThreshold) {
+        if (results == null || results.isEmpty()) {
+            return new SearchQuality(false, -1d, false, false);
+        }
+        double maxScore = results.stream()
+                .map(SearchResult::getScore)
+                .filter(score -> score != null)
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .orElse(-1d);
+        boolean calibrated = maxScore >= 0 && hasCalibratedRerankScores(results, rerankEnabled);
+        return new SearchQuality(
+                calibrated,
+                maxScore,
+                calibrated && maxScore < hardRejectThreshold,
+                calibrated && maxScore < warnThreshold
+        );
+    }
+
+    private static boolean hasCalibratedRerankScores(List<SearchResult> results, boolean rerankEnabled) {
+        return rerankEnabled
+                && results != null
+                && !results.isEmpty()
+                && results.stream().allMatch(result -> result.getScore() != null
+                && "HYBRID_RERANK".equalsIgnoreCase(result.getRetrievalMode()));
     }
 
     private String formatKnowledgeStats(Map<String, Object> data) {
@@ -432,5 +488,11 @@ public class AgentToolRegistry {
                                    Map<String, Object> data) {
             this(toolName, success, content, data, false);
         }
+    }
+
+    record SearchQuality(boolean scoreCalibrated,
+                         double maxScore,
+                         boolean hardRejected,
+                         boolean warning) {
     }
 }

@@ -201,3 +201,32 @@ For this repo, “done” usually means:
 3. browser re-tested
 4. network response confirmed
 5. any relevant DB/Redis state checked when the symptom is data-related
+
+## Current RAG Evaluation State
+
+The committed English evaluation suite is `rag-eval-en-v1` (120 answerable HotpotQA cases and
+30 unanswerable SQuAD 2.0 cases). Keep its Elasticsearch index fingerprint frozen when comparing
+prompt or rerank variants; normal answer-only reruns do not require passage re-vectorization.
+
+The latest answer contract is `rag-eval-answer-v5`. It checks the question premise before answer
+support and writes the evidence check before the decision fields. On the latest 30-case slices:
+
+- rerank on: HotpotQA Answer EM 60.00%, Token F1 75.41%, answer rate 90.00%
+- rerank off: HotpotQA Answer EM 36.67%, Token F1 49.33%, answer rate 60.00%
+- rerank on: SQuAD 2.0 correct abstention 76.67% (23/30)
+- rerank off: SQuAD 2.0 correct abstention 70.00% (21/30)
+
+Do not interpret a rerank relevance score as answer confidence. Production use showed that valid,
+fully supported answers can have a low absolute rerank score and receive a harmful low-confidence
+warning. The validation set also contains a fully answerable case whose best rerank score is 0.1843.
+The current `0.2` hard gate and `0.4` soft warning therefore need a follow-up change: keep rerank
+scores for ordering and observability, remove score-only answer suppression/warnings, and make final
+abstention depend on claim-to-citation entailment (preferably an independent verifier).
+
+The current default reranker is `gte-rerank-v2`. Alibaba's current documentation recommends moving
+to `qwen3-rerank`; evaluate its Q&A instruction mode on real production queries before changing the
+default. Calibrate retrieval behavior with production-like queries and track unnecessary refusal,
+unsupported-answer rate, retry count, and latency rather than optimizing only academic test cases.
+
+Evaluation run artifacts under `evaluation/runs/` are local and intentionally untracked unless the
+user explicitly asks to publish a specific report.

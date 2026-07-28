@@ -1,6 +1,10 @@
 # Compiled class file
 *.class
 
+# Python evaluation tooling
+__pycache__/
+*.py[cod]
+
 # Log file
 *.log
 

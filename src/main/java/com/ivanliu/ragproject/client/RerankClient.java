@@ -70,6 +70,10 @@ public class RerankClient {
         return enabled && apiKey != null && !apiKey.isBlank();
     }
 
+    public String currentModelVersion() {
+        return model;
+    }
+
     /**
      * 对候选文档重排。
      *
