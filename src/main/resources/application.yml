@@ -87,7 +87,7 @@ admin:
     # 仅用于首次引导创建管理员账号，创建成功后应关闭
     enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
     username: ${ADMIN_BOOTSTRAP_USERNAME:admin}
-    password: ${ADMIN_BOOTSTRAP_PASSWORD:admin12345678}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
     primary-org: ${ADMIN_BOOTSTRAP_PRIMARY_ORG:default}
     org-tags: ${ADMIN_BOOTSTRAP_ORG_TAGS:default,admin}
 
@@ -156,7 +156,7 @@ elasticsearch:
   port: ${ELASTICSEARCH_PORT:9200}
   scheme: ${ELASTICSEARCH_SCHEME:https}
   username: ${ELASTICSEARCH_USERNAME:elastic}
-  password: ${ELASTICSEARCH_PASSWORD:DdgaU6kHtr=KOtvOpGN3}
+  password: ${ELASTICSEARCH_PASSWORD:}
   insecure-trust-all-certificates: ${ELASTICSEARCH_INSECURE_TRUST_ALL_CERTIFICATES:true}
   init:
     enabled: ${ELASTICSEARCH_INIT_ENABLE:true}
@@ -190,7 +190,7 @@ embedding:
   api:
     # 向量服务配置
     url: ${EMBEDDING_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
-    key: ${EMBEDDING_API_KEY:sk-8c354c76a2ff43a3a79c8475d09e7029}
+    key: ${EMBEDDING_API_KEY:}
     model: ${EMBEDDING_API_MODEL:text-embedding-v4}
     batch-size: ${EMBEDDING_BATCH_SIZE:10}
     dimension: ${EMBEDDING_DIMENSION:2048}
