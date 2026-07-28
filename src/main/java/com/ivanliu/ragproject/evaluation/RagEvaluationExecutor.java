@@ -94,8 +94,9 @@ public class RagEvaluationExecutor {
         logger.info("RAG evaluation started: mode={}, datasetDir={}, cases={}, passages={}, index={}",
                 mode, datasetDir, cases.size(), corpus.size(), properties.getIndexName());
 
+        String datasetVersion = manifest.path("version").asText(DATASET_VERSION_FALLBACK);
         if (mode.preparesIndex()) {
-            prepareIndex(corpus, embeddingModel, indexFingerprint);
+            prepareIndex(corpus, embeddingModel, indexFingerprint, datasetVersion);
         } else {
             requireCompatibleIndex(corpus.size(), indexFingerprint);
         }
@@ -111,7 +112,8 @@ public class RagEvaluationExecutor {
 
     private void prepareIndex(List<EvaluationPassage> corpus,
                               String embeddingModel,
-                              String indexFingerprint) throws Exception {
+                              String indexFingerprint,
+                              String datasetVersion) throws Exception {
         boolean exists = indexExists();
         if (exists && properties.isResetIndex()) {
             validateSafeIndexName(properties.getIndexName());
@@ -125,7 +127,7 @@ public class RagEvaluationExecutor {
             return;
         }
 
-        createIndex(embeddingDimension(), embeddingModel, indexFingerprint);
+        createIndex(embeddingDimension(), embeddingModel, indexFingerprint, datasetVersion);
         int batchSize = Math.max(properties.getIndexBatchSize(), 1);
         for (int start = 0; start < corpus.size(); start += batchSize) {
             int end = Math.min(start + batchSize, corpus.size());
@@ -319,14 +321,14 @@ public class RagEvaluationExecutor {
         for (float value : queryVector) {
             vector.add(value);
         }
-        int recallWindow = Math.max(properties.getCandidateSize() * 3, properties.getCandidateSize());
+        int recallWindow = properties.getCandidateSize() * 3;
         SearchResponse<EvaluationEsDocument> response = elasticsearchClient.search(search -> {
             search.index(properties.getIndexName());
             search.knn(knn -> knn
                     .field("vector")
                     .queryVector(vector)
                     .k(recallWindow)
-                    .numCandidates(recallWindow)
+                    .numCandidates(recallWindow * 2)
             );
             search.query(query -> query.match(match -> match.field("text").query(question)));
             search.rescore(rescore -> rescore
@@ -404,11 +406,12 @@ public class RagEvaluationExecutor {
 
     private void createIndex(int dimension,
                              String embeddingModel,
-                             String indexFingerprint) throws Exception {
+                             String indexFingerprint,
+                             String datasetVersion) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
         ObjectNode mappings = root.putObject("mappings");
         ObjectNode metadata = mappings.putObject("_meta");
-        metadata.put("dataset", DATASET_VERSION_FALLBACK);
+        metadata.put("dataset", datasetVersion);
         metadata.put("embeddingModel", embeddingModel);
         metadata.put("indexFingerprint", indexFingerprint);
         ObjectNode fields = mappings.putObject("properties");

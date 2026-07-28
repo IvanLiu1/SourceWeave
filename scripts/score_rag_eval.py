@@ -68,6 +68,14 @@ def write_json(path: Path, value: Any) -> None:
         destination.write("\n")
 
 
+def write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as destination:
+        for row in rows:
+            destination.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
+            destination.write("\n")
+
+
 def normalize_answer(value: str) -> str:
     lowered = value.lower()
     without_punctuation = "".join(character for character in lowered if character not in string.punctuation)
@@ -235,7 +243,116 @@ def validate_inputs(
     }
 
 
-def retrieval_metrics(case: dict[str, Any], prediction: dict[str, Any]) -> dict[str, float]:
+def adjudication_candidate_keys(
+    cases_by_id: dict[str, dict[str, Any]],
+    predictions_by_key: dict[tuple[str, str], dict[str, Any]],
+) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for case_id, case in cases_by_id.items():
+        if case["dataset"] != "hotpotqa":
+            continue
+        baseline = predictions_by_key.get((case_id, BASELINE))
+        rerank = predictions_by_key.get((case_id, RERANK))
+        if baseline is None or rerank is None:
+            continue
+        gold_passage_ids = {fact["passageId"] for fact in case["goldEvidence"]}
+        baseline_ids = set(baseline["retrievedPassageIds"])
+        rerank_ids = set(rerank["retrievedPassageIds"])
+        for passage_id in baseline_ids ^ rerank_ids:
+            if passage_id not in gold_passage_ids:
+                keys.add((case_id, passage_id))
+    return keys
+
+
+def build_adjudication_rows(
+    cases: list[dict[str, Any]],
+    corpus: list[dict[str, Any]],
+    predictions: list[dict[str, Any]],
+    seed: int = DEFAULT_SEED,
+) -> list[dict[str, Any]]:
+    validated = validate_inputs(cases, corpus, predictions)
+    if not validated["paired"]:
+        raise EvaluationError("Blind adjudication requires paired baseline and rerank predictions")
+
+    cases_by_id = validated["casesById"]
+    corpus_by_id = {str(passage["passageId"]): passage for passage in corpus}
+    rows: list[dict[str, Any]] = []
+    for case_id, passage_id in sorted(
+        adjudication_candidate_keys(cases_by_id, validated["predictionsByKey"])
+    ):
+        case = cases_by_id[case_id]
+        passage = corpus_by_id[passage_id]
+        rows.append({
+            "caseId": case_id,
+            "question": case["question"],
+            "referenceAnswers": case["referenceAnswers"],
+            "goldEvidence": case["goldEvidence"],
+            "passageId": passage_id,
+            "passageTitle": passage.get("title", ""),
+            "passageText": passage.get("text", ""),
+            "relevance": None,
+        })
+
+    random.Random(seed).shuffle(rows)
+    return [
+        {"reviewId": f"review-{index:04d}", **row}
+        for index, row in enumerate(rows, start=1)
+    ]
+
+
+def validate_manual_qrels(
+    rows: list[dict[str, Any]] | None,
+    expected_keys: set[tuple[str, str]],
+) -> tuple[dict[str, dict[str, int]], dict[str, int | bool]]:
+    if rows is None:
+        return {}, {
+            "requiredCount": len(expected_keys),
+            "completedCount": 0,
+            "relevantCount": 0,
+            "complete": not expected_keys,
+        }
+
+    relevance_by_case: dict[str, dict[str, int]] = defaultdict(dict)
+    actual_keys: set[tuple[str, str]] = set()
+    relevant_count = 0
+    for index, row in enumerate(rows, start=1):
+        case_id = row.get("caseId")
+        passage_id = row.get("passageId")
+        relevance = row.get("relevance")
+        if not isinstance(case_id, str) or not isinstance(passage_id, str):
+            raise EvaluationError(f"Manual qrels row {index} requires string caseId and passageId")
+        if isinstance(relevance, bool) or relevance not in (0, 1):
+            raise EvaluationError(f"Manual qrels row {index} relevance must be 0 or 1")
+        key = (case_id, passage_id)
+        if key in actual_keys:
+            raise EvaluationError(f"Duplicate manual qrel for {case_id}/{passage_id}")
+        actual_keys.add(key)
+        relevance_by_case[case_id][passage_id] = relevance
+        relevant_count += relevance
+
+    missing = expected_keys - actual_keys
+    extra = actual_keys - expected_keys
+    if missing or extra:
+        details: list[str] = []
+        if missing:
+            details.append(f"missing {len(missing)} required judgments")
+        if extra:
+            details.append(f"contains {len(extra)} unexpected judgments")
+        raise EvaluationError("Manual qrels are incomplete or out of scope: " + ", ".join(details))
+
+    return dict(relevance_by_case), {
+        "requiredCount": len(expected_keys),
+        "completedCount": len(actual_keys),
+        "relevantCount": relevant_count,
+        "complete": True,
+    }
+
+
+def retrieval_metrics(
+    case: dict[str, Any],
+    prediction: dict[str, Any],
+    manual_relevance: dict[str, int] | None = None,
+) -> dict[str, float]:
     retrieved = prediction["retrievedPassageIds"]
     candidate_ids = {candidate["passageId"] for candidate in prediction["candidates"]}
     evidence = case["goldEvidence"]
@@ -246,16 +363,18 @@ def retrieval_metrics(case: dict[str, Any], prediction: dict[str, Any]) -> dict[
     recall = fact_hits / len(evidence) if evidence else 0.0
     all_evidence = float(bool(evidence) and fact_hits == len(evidence))
 
+    relevance_by_passage = {passage_id: 2 for passage_id in gold_passage_ids}
+    relevance_by_passage.update(manual_relevance or {})
     dcg = 0.0
     for rank, passage_id in enumerate(retrieved, start=1):
-        relevance = 2 if passage_id in gold_passage_ids else 0
+        relevance = relevance_by_passage.get(passage_id, 0)
         dcg += (2**relevance - 1) / math.log2(rank + 1)
-    ideal_relevances = [2] * min(len(gold_passage_ids), TOP_K)
+    ideal_relevances = sorted(relevance_by_passage.values(), reverse=True)[:TOP_K]
     ideal_dcg = sum((2**relevance - 1) / math.log2(rank + 1) for rank, relevance in enumerate(ideal_relevances, 1))
     ndcg = dcg / ideal_dcg if ideal_dcg else 0.0
 
     first_relevant_rank = next(
-        (rank for rank, passage_id in enumerate(retrieved, start=1) if passage_id in gold_passage_ids),
+        (rank for rank, passage_id in enumerate(retrieved, start=1) if relevance_by_passage.get(passage_id, 0) > 0),
         None,
     )
     reciprocal_rank = 1 / first_relevant_rank if first_relevant_rank else 0.0
@@ -290,8 +409,12 @@ def answer_and_citation_metrics(case: dict[str, Any], prediction: dict[str, Any]
     }
 
 
-def score_hotpot_case(case: dict[str, Any], prediction: dict[str, Any]) -> dict[str, float]:
-    return retrieval_metrics(case, prediction) | answer_and_citation_metrics(case, prediction)
+def score_hotpot_case(
+    case: dict[str, Any],
+    prediction: dict[str, Any],
+    manual_relevance: dict[str, int] | None = None,
+) -> dict[str, float]:
+    return retrieval_metrics(case, prediction, manual_relevance) | answer_and_citation_metrics(case, prediction)
 
 
 def score_squad_case(prediction: dict[str, Any]) -> dict[str, float]:
@@ -380,10 +503,16 @@ def build_report(
     predictions: list[dict[str, Any]],
     bootstrap_iterations: int = DEFAULT_BOOTSTRAP_ITERATIONS,
     seed: int = DEFAULT_SEED,
+    manual_qrels: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     validated = validate_inputs(cases, corpus, predictions)
     cases_by_id = validated["casesById"]
     predictions_by_key = validated["predictionsByKey"]
+    expected_adjudication_keys = adjudication_candidate_keys(cases_by_id, predictions_by_key)
+    manual_relevance_by_case, adjudication_summary = validate_manual_qrels(
+        manual_qrels,
+        expected_adjudication_keys,
+    )
 
     scores_by_variant: dict[str, dict[str, dict[str, dict[str, float]]]] = defaultdict(
         lambda: defaultdict(dict)
@@ -393,7 +522,11 @@ def build_report(
         case = cases_by_id[case_id]
         predictions_by_variant[variant].append(prediction)
         if case["dataset"] == "hotpotqa":
-            scores_by_variant[variant]["hotpotqa"][case_id] = score_hotpot_case(case, prediction)
+            scores_by_variant[variant]["hotpotqa"][case_id] = score_hotpot_case(
+                case,
+                prediction,
+                manual_relevance_by_case.get(case_id),
+            )
         elif case["dataset"] == "squad2":
             scores_by_variant[variant]["squad2"][case_id] = score_squad_case(prediction)
 
@@ -456,6 +589,7 @@ def build_report(
             "candidateCount": EXPECTED_CANDIDATES,
             "topK": TOP_K,
             "identicalOrderedCandidatesAndScores": validated["paired"],
+            "manualAdjudication": adjudication_summary,
         },
         "variants": variants,
         "pairedDeltas": {"hotpotqa": paired_deltas} if paired_deltas else {},
@@ -478,6 +612,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         ),
         "",
     ]
+    adjudication = report["validation"]["manualAdjudication"]
+    lines.extend([
+        (
+            f"Manual adjudication: {adjudication['completedCount']}/{adjudication['requiredCount']} judgments; "
+            f"{adjudication['relevantCount']} marked useful."
+        ),
+        "",
+    ])
+    if not adjudication["complete"]:
+        lines.extend([
+            "> nDCG@5 and MRR@5 are preliminary until the blind adjudication file is completed.",
+            "",
+        ])
     deltas = report.get("pairedDeltas", {}).get("hotpotqa", {})
     if deltas:
         lines.extend(
@@ -528,6 +675,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="Directory for summary.json and report.md")
+    parser.add_argument(
+        "--manual-qrels",
+        type=Path,
+        help="Completed blind-adjudication JSONL with relevance set to 0 or 1",
+    )
+    parser.add_argument(
+        "--adjudication-output",
+        type=Path,
+        help="Write a shuffled, variant-blind JSONL review sheet",
+    )
     parser.add_argument("--bootstrap-iterations", type=int, default=DEFAULT_BOOTSTRAP_ITERATIONS)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     return parser.parse_args()
@@ -537,16 +694,25 @@ def main() -> None:
     args = parse_args()
     if args.bootstrap_iterations <= 0:
         raise EvaluationError("--bootstrap-iterations must be positive")
+    cases = read_jsonl(args.cases)
+    corpus = read_jsonl(args.corpus)
+    predictions = read_jsonl(args.predictions)
     report = build_report(
-        read_jsonl(args.cases),
-        read_jsonl(args.corpus),
-        read_jsonl(args.predictions),
+        cases,
+        corpus,
+        predictions,
         bootstrap_iterations=args.bootstrap_iterations,
         seed=args.seed,
+        manual_qrels=read_jsonl(args.manual_qrels) if args.manual_qrels else None,
     )
     write_json(args.output / "summary.json", report)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "report.md").write_text(render_markdown(report), encoding="utf-8", newline="\n")
+    if args.adjudication_output:
+        write_jsonl(
+            args.adjudication_output,
+            build_adjudication_rows(cases, corpus, predictions, seed=args.seed),
+        )
     print(json.dumps(report["validation"], ensure_ascii=False, indent=2, sort_keys=True))
 
 

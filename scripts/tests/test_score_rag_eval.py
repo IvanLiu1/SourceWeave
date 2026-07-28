@@ -10,6 +10,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from score_rag_eval import (  # noqa: E402
     EvaluationError,
     answer_f1,
+    build_adjudication_rows,
     build_report,
     exact_match,
 )
@@ -107,6 +108,8 @@ class ScoreRagEvalTest(unittest.TestCase):
         self.assertEqual(1.0, rerank["JointAccuracy"])
         self.assertEqual(1.0, report["variants"]["baseline"]["squad2"]["AbstentionAccuracy"])
         self.assertEqual(0.0, report["variants"]["baseline"]["latency"]["generationParseErrorRate"])
+        self.assertFalse(report["validation"]["manualAdjudication"]["complete"])
+        self.assertEqual(1, report["validation"]["manualAdjudication"]["requiredCount"])
 
         recall_delta = report["pairedDeltas"]["hotpotqa"]["Recall@5"]
         self.assertEqual(0.5, recall_delta["absoluteDelta"])
@@ -143,6 +146,67 @@ class ScoreRagEvalTest(unittest.TestCase):
         self.assertEqual(1.0, exact_match("An author!", ["the author"]))
         self.assertEqual(1.0, answer_f1("An author!", "the author"))
         self.assertEqual(0.0, answer_f1("yes", "no"))
+
+    def test_builds_variant_blind_adjudication_rows(self):
+        rows = build_adjudication_rows(self.cases, self.corpus, self.predictions, seed=7)
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("passage-1", rows[0]["passageId"])
+        self.assertIsNone(rows[0]["relevance"])
+        self.assertNotIn("variant", rows[0])
+        self.assertNotIn("rank", rows[0])
+        self.assertNotIn("retrievedPassageIds", rows[0])
+
+    def test_uses_completed_manual_qrels_for_graded_relevance(self):
+        official_only = build_report(
+            self.cases,
+            self.corpus,
+            self.predictions,
+            bootstrap_iterations=10,
+            seed=7,
+        )
+        qrels = build_adjudication_rows(self.cases, self.corpus, self.predictions, seed=7)
+        qrels[0]["relevance"] = 1
+
+        adjudicated = build_report(
+            self.cases,
+            self.corpus,
+            self.predictions,
+            bootstrap_iterations=10,
+            seed=7,
+            manual_qrels=qrels,
+        )
+
+        summary = adjudicated["validation"]["manualAdjudication"]
+        self.assertTrue(summary["complete"])
+        self.assertEqual(1, summary["completedCount"])
+        self.assertEqual(1, summary["relevantCount"])
+        self.assertGreater(
+            adjudicated["variants"]["baseline"]["hotpotqa"]["nDCG@5"],
+            official_only["variants"]["baseline"]["hotpotqa"]["nDCG@5"],
+        )
+
+    def test_rejects_incomplete_manual_qrels(self):
+        with self.assertRaisesRegex(EvaluationError, "missing 1 required judgments"):
+            build_report(
+                self.cases,
+                self.corpus,
+                self.predictions,
+                bootstrap_iterations=10,
+                manual_qrels=[],
+            )
+
+    def test_rejects_unjudged_manual_qrel(self):
+        qrels = build_adjudication_rows(self.cases, self.corpus, self.predictions, seed=7)
+
+        with self.assertRaisesRegex(EvaluationError, "relevance must be 0 or 1"):
+            build_report(
+                self.cases,
+                self.corpus,
+                self.predictions,
+                bootstrap_iterations=10,
+                manual_qrels=qrels,
+            )
 
     def _hotpot_prediction(self, variant, retrieved, answer, citations):
         return {

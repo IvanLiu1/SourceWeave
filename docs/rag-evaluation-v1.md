@@ -95,18 +95,21 @@ Write one JSON object per `(caseId, variant)` to a JSONL file. A HotpotQA row ha
 the same captured `candidates` array for A and B. The scorer rejects a run if IDs, order, or ES scores
 differ; it also verifies that baseline output is exactly the first five candidate IDs.
 
-SQuAD2 rows use the same common fields but do not require retrieval fields. Score a completed run with:
+SQuAD2 rows use the same common fields but do not require retrieval fields. Generate a preliminary
+report and the variant-blind adjudication sheet from a completed run with:
 
 ```bash
 python3 scripts/score_rag_eval.py \
   --cases evaluation/datasets/rag-eval-en-v1/cases.jsonl \
   --corpus evaluation/datasets/rag-eval-en-v1/corpus.jsonl \
   --predictions /path/to/predictions.jsonl \
-  --output /path/to/evaluation-report
+  --output /path/to/evaluation-report-preliminary \
+  --adjudication-output /path/to/manual-qrels.jsonl
 ```
 
 The scorer writes machine-readable `summary.json` and resume/report-friendly `report.md`, including
-paired 95% bootstrap confidence intervals.
+paired 95% bootstrap confidence intervals. Without completed manual qrels, `nDCG@5` and `MRR@5` are
+explicitly marked preliminary; the other metrics are final.
 
 ## Run the evaluator
 
@@ -198,6 +201,29 @@ tracks separately, plus macro averages by HotpotQA question type.
 Official supporting facts initialize the qrels. Blindly review every passage that appears in only one
 variant's top five; add relevance 1 only when it is genuinely useful for the reference answer. The
 reviewer must not know whether a result came from A or B.
+
+The generated `manual-qrels.jsonl` excludes official supporting passages because they already have
+relevance 2. It contains the question, reference answer, official evidence, and candidate passage, but
+does not contain the variant, rank, or either variant's Top 5. Give only this file to the reviewer. The
+reviewer must replace every `"relevance": null` with:
+
+- `1` when the passage is genuinely useful for answering the question;
+- `0` when it is not useful.
+
+The scorer rejects missing, duplicate, out-of-scope, or unjudged rows. Produce the final report with:
+
+```bash
+python3 scripts/score_rag_eval.py \
+  --cases evaluation/datasets/rag-eval-en-v1/cases.jsonl \
+  --corpus evaluation/datasets/rag-eval-en-v1/corpus.jsonl \
+  --predictions /path/to/predictions.jsonl \
+  --manual-qrels /path/to/manual-qrels.jsonl \
+  --output /path/to/evaluation-report-final
+```
+
+For `nDCG@5` and `MRR@5`, the final qrels use relevance 2 for official supporting passages,
+relevance 1 for manually adjudicated useful passages, and relevance 0 otherwise. Recall and citation
+coverage remain tied to official supporting facts.
 
 Use paired bootstrap resampling by case to produce 95% confidence intervals for A/B deltas. Retrieval is
 run once against a frozen index. Generation uses temperature 0; rerun a fixed 30-case stability subset
