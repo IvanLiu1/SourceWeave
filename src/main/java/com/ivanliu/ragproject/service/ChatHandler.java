@@ -653,9 +653,9 @@ public class ChatHandler {
                 return "";
             }
 
-            StringBuilder guidance = new StringBuilder("近期用户对回答的显式反馈如下，按时间倒序排列，越靠前越新。")
-                    .append("后续回答需要参考这些偏好：good 表示用户认可这类回答方式，bad 表示需要避免类似问题；")
-                    .append("如果同一轮回答既有 good 又有 bad，以最新一条为准。\n");
+            StringBuilder guidance = new StringBuilder("Recent explicit user feedback is listed newest first. ")
+                    .append("Use it as a response preference: good means the user approved that answer style, while bad means similar problems should be avoided. ")
+                    .append("If the same turn has both good and bad entries, follow the newest one.\n");
             feedbackEntries.entrySet().stream()
                     .sorted(Comparator.comparingLong(entry -> -parseFeedbackTimestamp(entry.getKey())))
                     .limit(5)

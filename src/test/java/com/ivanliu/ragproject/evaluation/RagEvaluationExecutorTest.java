@@ -31,6 +31,23 @@ class RagEvaluationExecutorTest {
     }
 
     @Test
+    void preservesCalibratedRerankScoresForThresholdAnalysis() {
+        List<RerankClient.RerankResult> reranked = List.of(
+                new RerankClient.RerankResult(4, 0.91),
+                new RerankClient.RerankResult(2, 0.82),
+                new RerankClient.RerankResult(1, 0.73)
+        );
+
+        List<RagEvaluationExecutor.RerankScoreSnapshot> snapshots =
+                RagEvaluationExecutor.snapshotRerankScores(candidates(5), reranked, 3);
+
+        assertEquals(List.of("p-4", "p-2", "p-1"),
+                snapshots.stream().map(RagEvaluationExecutor.RerankScoreSnapshot::passageId).toList());
+        assertEquals(List.of(0.91, 0.82, 0.73),
+                snapshots.stream().map(RagEvaluationExecutor.RerankScoreSnapshot::score).toList());
+    }
+
+    @Test
     void fallsBackToOriginalTopFiveWhenRerankFails() {
         List<RagEvaluationExecutor.RetrievedPassage> selected =
                 RagEvaluationExecutor.selectReranked(candidates(50), null, 5);
@@ -63,6 +80,36 @@ class RagEvaluationExecutorTest {
                 () -> RagEvaluationExecutor.validateSafeIndexName("sourceweave_eval_*"));
     }
 
+    @Test
+    void selectsExactCasesInRequestedOrderForTargetedRetries() {
+        List<RagEvaluationExecutor.EvaluationCase> cases = List.of(
+                evaluationCase("case-1"),
+                evaluationCase("case-2"),
+                evaluationCase("case-3")
+        );
+
+        List<RagEvaluationExecutor.EvaluationCase> selected = RagEvaluationExecutor.selectCases(
+                cases,
+                List.of("case-3", "case-1"),
+                0
+        );
+
+        assertEquals(List.of("case-3", "case-1"),
+                selected.stream().map(RagEvaluationExecutor.EvaluationCase::caseId).toList());
+    }
+
+    @Test
+    void rejectsUnknownOrDuplicateRetryCaseIds() {
+        List<RagEvaluationExecutor.EvaluationCase> cases = List.of(evaluationCase("case-1"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RagEvaluationExecutor.selectCases(cases, List.of("missing"), 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> RagEvaluationExecutor.selectCases(cases, List.of("case-1", "case-1"), 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> RagEvaluationExecutor.selectCases(cases, List.of("case-1"), 1));
+    }
+
     private List<RagEvaluationExecutor.RetrievedPassage> candidates(int count) {
         List<RagEvaluationExecutor.RetrievedPassage> candidates = new ArrayList<>(count);
         for (int index = 0; index < count; index++) {
@@ -74,5 +121,9 @@ class RagEvaluationExecutorTest {
             ));
         }
         return candidates;
+    }
+
+    private RagEvaluationExecutor.EvaluationCase evaluationCase(String caseId) {
+        return new RagEvaluationExecutor.EvaluationCase(caseId, "dataset", "task", "type", "question");
     }
 }

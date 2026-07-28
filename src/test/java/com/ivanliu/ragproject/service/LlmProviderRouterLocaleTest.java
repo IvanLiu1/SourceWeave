@@ -41,14 +41,14 @@ class LlmProviderRouterLocaleTest {
         assertTrue(systemPrompt.contains("Answer only in English"));
         assertTrue(systemPrompt.contains("Source #N"));
         assertTrue(systemPrompt.contains("Page X"));
-        assertFalse(systemPrompt.contains("仅用简体中文作答"));
+        assertFalse(systemPrompt.contains("Answer only in Simplified Chinese"));
     }
 
     @Test
     void defaultsExistingOverloadToChineseContract() {
         String systemPrompt = systemPrompt(router.buildReActMessages("问题", "", List.of()));
 
-        assertTrue(systemPrompt.contains("仅用简体中文作答"));
+        assertTrue(systemPrompt.contains("Answer only in Simplified Chinese"));
         assertTrue(systemPrompt.contains("来源#N"));
         assertTrue(systemPrompt.contains("第X页"));
     }
@@ -57,8 +57,18 @@ class LlmProviderRouterLocaleTest {
     void fallsBackToChineseForUnsupportedLocale() {
         String systemPrompt = systemPrompt(router.buildReActMessages("question", "", List.of(), "", "fr-FR"));
 
-        assertTrue(systemPrompt.contains("仅用简体中文作答"));
+        assertTrue(systemPrompt.contains("Answer only in Simplified Chinese"));
         assertFalse(systemPrompt.contains("Answer only in English"));
+    }
+
+    @Test
+    void treatsRetrievedSnippetsAsCandidateEvidenceAndAllowsAbstention() {
+        String systemPrompt = systemPrompt(router.buildReActMessages("问题", "", List.of()));
+
+        assertTrue(systemPrompt.contains("candidate evidence, not proof"));
+        assertTrue(systemPrompt.contains("explicitly entails the answer to the exact question"));
+        assertTrue(systemPrompt.contains("LOW_CONFIDENCE"));
+        assertFalse(systemPrompt.contains("must answer whenever"));
     }
 
     private String systemPrompt(List<Map<String, Object>> messages) {

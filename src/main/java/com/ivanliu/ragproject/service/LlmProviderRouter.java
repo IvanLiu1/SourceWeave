@@ -78,26 +78,28 @@ public class LlmProviderRouter {
             sysBuilder.append(promptCfg.getRules()).append("\n\n");
         }
         appendLocalizedResponseContract(sysBuilder, normalizeLocale(locale));
-        sysBuilder.append("本系统是「知识库优先」的问答助手：你的首要职责是基于本系统已收录的资料回答用户。除非命中下方明确的白名单，否则**每一个用户问题都必须先调用 search_knowledge**，再基于检索结果作答。\n\n")
-                .append("强制检索原则（默认行为）：\n")
-                .append("1. 默认调用 search_knowledge：只要问题涉及任何实体、名称、缩写、产品、项目、术语、流程、功能、实现、背景、对比、引用，或包含「这/它/该/上述/这个/那个」等上下文指代，无论你是否自认为已知答案，都必须先检索，不要等用户说「查知识库」。\n")
-                .append("2. 构造 query 时严格保留用户原话中的核心名词、缩写和限定词，禁止替换为泛化关键词；必要时可在同一次 query 中合并原句与等价改写。\n")
-                .append("3. 用户要求整理、总结、归纳、提炼知识库内容时，先用 search_knowledge 圈定材料，再调用 generate_summary 生成总结。\n\n")
-                .append("可以跳过 search_knowledge 的白名单（必须严格匹配其一，否则一律检索）：\n")
-                .append("- 纯打招呼或寒暄（你好/谢谢/再见等）；\n")
-                .append("- 纯翻译请求（把 X 翻译为 Y），且不涉及本系统术语；\n")
-                .append("- 与本系统材料无关的纯创作请求（写诗、写段子等）；\n")
-                .append("- 通用编程语法、数学计算等完全不依赖任何专有信息的常识题；\n")
-                .append("- 用户在本轮明确表示「不要查知识库 / 直接回答」。\n\n")
-                .append("回答与异常处理：\n")
-                .append("- 只要 search_knowledge 返回了片段，必须基于片段作答并按来源编号标注，禁止回答「知识库暂无相关信息」。\n")
-                .append("- 来源编号 [N] 跨多轮检索全局递增且唯一：引用时必须使用片段前实际标注的编号，禁止自行从 [1] 重新编号；不同轮次检索到的片段可以混合引用。\n")
-                .append("- search_knowledge 结果头部会给出检索质量信号（最高相关性分与参考阈值）：若提示相关性偏低，优先保留核心实体改写 query（同义词、中英文互换、展开缩写）再检索，改写重试一般不超过 2 次；重试后仍偏低就基于现有片段谨慎作答并说明依据不足。\n")
-                .append("- 只有工具明确返回零片段时，才说明暂无相关材料并提示用户补充线索。\n")
-                .append("- 工具失败时根据错误信息决定下一步（重试 / 换 query / 继续推理），不要直接中断。\n")
-                .append("- 早前轮次的 tool 结果可能被压缩为「[已压缩]」存根，其中列出的来源编号仍然有效、可直接引用；仅当确需逐字引用某片段完整原文时，调用 fetch_chunk 并传入该来源编号取回。\n")
-                .append("- 如需记录反馈或查看知识库统计，通过 tool_calls 调用对应工具。\n")
-                .append("拿到 tool 结果后继续推理并给出最终回答。\n\n");
+        sysBuilder.append("This is a knowledge-base-first assistant. Unless a request matches an explicit exemption below, every user question must call search_knowledge before answering.\n\n")
+                .append("Mandatory retrieval policy:\n")
+                .append("1. Call search_knowledge whenever a request mentions an entity, name, acronym, product, project, term, process, feature, implementation, background, comparison, citation, or contextual reference such as this/it/that/the above. Retrieve even when you believe you already know the answer.\n")
+                .append("2. Preserve the user's core nouns, acronyms, qualifiers, and polarity when constructing the query. Do not replace them with generic keywords. A faithful paraphrase may be added to the same query.\n")
+                .append("3. For requests to organize or summarize knowledge-base material, first call search_knowledge to identify the material, then call generate_summary.\n\n")
+                .append("Retrieval exemptions (the request must clearly match one):\n")
+                .append("- a greeting or social pleasantry;\n")
+                .append("- a pure translation request that does not involve system-specific terminology;\n")
+                .append("- a creative-writing request unrelated to the knowledge base;\n")
+                .append("- general programming syntax, arithmetic, or common knowledge that needs no proprietary information;\n")
+                .append("- the user explicitly says not to search the knowledge base.\n\n")
+                .append("Evidence and abstention policy:\n")
+                .append("- Retrieved snippets are candidate evidence, not proof. Never answer merely because search_knowledge returned snippets.\n")
+                .append("- Before answering, verify that the evidence explicitly entails the answer to the exact question. Every entity, relationship, quantity, qualifier, comparison, and negation in the answer must be supported. Topic overlap, a nearby answer-like phrase, a repaired premise, or plausible outside knowledge is not sufficient.\n")
+                .append("- If any required part is unsupported or contradicted, state that the available knowledge-base evidence is insufficient. Do not guess and do not turn a related fact into an answer.\n")
+                .append("- Source numbers [N] increase globally across retrieval rounds. Cite the actual numbers shown by the tool; never restart numbering at [1]. Evidence from different rounds may be combined.\n")
+                .append("- A LOW_CONFIDENCE search result contains no usable evidence. Retry with a faithful query refinement at most twice. If confidence remains low, refuse to answer and ask for a clarifying detail.\n")
+                .append("- If search returns no usable snippets, retry when a faithful refinement is possible; otherwise refuse to answer.\n")
+                .append("- On tool failure, use the error to decide whether to retry or change the query. Never invent tool output.\n")
+                .append("- Older tool results may be compressed into stubs. Their source numbers remain valid. Call fetch_chunk only when exact original wording is required.\n")
+                .append("- Use the relevant tool call to record feedback or inspect knowledge-base statistics.\n")
+                .append("After tool use, continue reasoning and provide the final response under the response contract above.\n\n");
         if (feedbackGuidance != null && !feedbackGuidance.isBlank()) {
             sysBuilder.append(feedbackGuidance.trim()).append("\n\n");
         }
@@ -144,11 +146,11 @@ public class LlmProviderRouter {
             return;
         }
 
-        builder.append("本轮回答要求：\n")
-                .append("1. 仅用简体中文作答。\n")
-                .append("2. 先给结论，再给论据。\n")
-                .append("3. 在句末按（来源#N: 文件名）引用；有页码时使用（来源#N: 文件名 | 第X页）。\n")
-                .append("4. 信息不足时，说明暂无相关信息并给出原因。\n\n");
+        builder.append("Response requirements for this turn:\n")
+                .append("1. Answer only in Simplified Chinese.\n")
+                .append("2. State the conclusion first, followed by supporting evidence.\n")
+                .append("3. Cite references at sentence ends as （来源#N: 文件名）, or （来源#N: 文件名 | 第X页） when a page number is available.\n")
+                .append("4. If the available evidence is insufficient, say so in Simplified Chinese and identify what support is missing.\n\n");
     }
 
     public StreamHandle streamReActTurn(String requesterId,

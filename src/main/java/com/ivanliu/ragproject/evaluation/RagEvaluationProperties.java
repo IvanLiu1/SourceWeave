@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.util.List;
 
 @Data
 @Component
@@ -27,6 +28,9 @@ public class RagEvaluationProperties {
 
     /** Zero means all cases; a positive value is useful for a cheap smoke run. */
     private int maxCases = 0;
+
+    /** Optional exact case IDs for targeted retries; cannot be combined with maxCases. */
+    private List<String> caseIds = List.of();
 
     private int candidateSize = 50;
     private int topK = 5;

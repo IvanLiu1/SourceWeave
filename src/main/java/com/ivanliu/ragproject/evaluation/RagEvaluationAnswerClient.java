@@ -21,7 +21,7 @@ import java.util.Set;
 @Component
 public class RagEvaluationAnswerClient {
 
-    static final String PROMPT_VERSION = "rag-eval-answer-v2";
+    static final String PROMPT_VERSION = "rag-eval-answer-v3";
     static final String ABSTENTION = "INSUFFICIENT_EVIDENCE";
 
     private final ModelProviderConfigService modelProviderConfigService;
@@ -99,6 +99,8 @@ public class RagEvaluationAnswerClient {
                     parsed.answer(),
                     parsed.citedPassageIds(),
                     parsed.parseError(),
+                    parsed.supported(),
+                    parsed.supportReason(),
                     promptTokens,
                     completionTokens,
                     provider.provider() + ":" + provider.model()
@@ -131,12 +133,17 @@ public class RagEvaluationAnswerClient {
 
     List<Map<String, String>> buildMessages(String question,
                                             List<RagEvaluationExecutor.RetrievedPassage> passages) {
-        String systemPrompt = "You are a deterministic RAG evaluation assistant. "
-                + "Answer only from the supplied passages. If the passages do not support an answer, "
-                + "set answer to exactly INSUFFICIENT_EVIDENCE. Return one JSON object only with this schema: "
-                + "{\"answer\":\"short answer\",\"citedPassageIds\":[\"passage-id\"]}. "
-                + "Citations must be passage IDs from the supplied passages and must directly support the answer. "
-                + "Do not add markdown or explanation.";
+        String systemPrompt = "You are a strict evidence-entailment judge for deterministic RAG evaluation. "
+                + "First decide whether the supplied passages explicitly entail a complete answer to the exact question. "
+                + "Every entity, relationship, quantity, qualifier, comparison, and negation must be supported. "
+                + "Semantic relevance, lexical overlap, a nearby answer-like phrase, a repaired or substituted premise, "
+                + "and plausible outside knowledge are not sufficient. Use only direct statements or unambiguous paraphrases from the passages. "
+                + "Return exactly one JSON object with this schema: "
+                + "{\"supported\":true,\"answer\":\"short answer or INSUFFICIENT_EVIDENCE\","
+                + "\"citedPassageIds\":[\"passage-id\"],\"supportReason\":\"short evidence check\"}. "
+                + "When supported is false, answer must be exactly INSUFFICIENT_EVIDENCE and citedPassageIds must be empty. "
+                + "When supported is true, each cited passage must directly support the answer and every required part of the question. "
+                + "Do not add markdown or text outside the JSON object.";
 
         StringBuilder userPrompt = new StringBuilder("Question: ")
                 .append(question)
@@ -166,6 +173,11 @@ public class RagEvaluationAnswerClient {
         try {
             String json = extractJsonObject(content);
             JsonNode root = objectMapper.readTree(json);
+            JsonNode supportedNode = root.get("supported");
+            if (supportedNode == null || !supportedNode.isBoolean()) {
+                throw new IllegalArgumentException("supported must be a boolean");
+            }
+            boolean supported = supportedNode.asBoolean();
             String answer = root.path("answer").asText("").trim();
             if (answer.isBlank()) {
                 throw new IllegalArgumentException("answer is empty");
@@ -185,13 +197,30 @@ public class RagEvaluationAnswerClient {
             } else {
                 invalidCitation = true;
             }
-            if (ABSTENTION.equalsIgnoreCase(answer)) {
+            String supportReason = root.path("supportReason").asText("").trim();
+            boolean schemaMismatch = supportReason.isBlank();
+            if (!supported) {
+                schemaMismatch = schemaMismatch
+                        || !ABSTENTION.equalsIgnoreCase(answer)
+                        || !citations.isEmpty();
                 citations.clear();
                 answer = ABSTENTION;
+            } else if (ABSTENTION.equalsIgnoreCase(answer) || citations.isEmpty()) {
+                schemaMismatch = true;
+                if (ABSTENTION.equalsIgnoreCase(answer)) {
+                    answer = ABSTENTION;
+                    citations.clear();
+                }
             }
-            return new ParsedAnswer(answer, List.copyOf(citations), invalidCitation);
+            return new ParsedAnswer(
+                    answer,
+                    List.copyOf(citations),
+                    invalidCitation || schemaMismatch,
+                    supported,
+                    supportReason
+            );
         } catch (Exception ignored) {
-            return new ParsedAnswer(content.trim(), List.of(), true);
+            return new ParsedAnswer(content.trim(), List.of(), true, false, "");
         }
     }
 
@@ -210,12 +239,18 @@ public class RagEvaluationAnswerClient {
         return provider.provider() + ":" + provider.model();
     }
 
-    record ParsedAnswer(String answer, List<String> citedPassageIds, boolean parseError) {
+    record ParsedAnswer(String answer,
+                        List<String> citedPassageIds,
+                        boolean parseError,
+                        boolean supported,
+                        String supportReason) {
     }
 
     public record AnswerResult(String answer,
                                List<String> citedPassageIds,
                                boolean parseError,
+                               boolean supported,
+                               String supportReason,
                                int promptTokens,
                                int completionTokens,
                                String modelVersion) {

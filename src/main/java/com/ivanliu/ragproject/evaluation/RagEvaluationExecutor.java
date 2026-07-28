@@ -169,7 +169,7 @@ public class RagEvaluationExecutor {
             throw new IllegalStateException("Rerank must be enabled and configured for a baseline/rerank evaluation run");
         }
 
-        List<EvaluationCase> cases = limitedCases(allCases);
+        List<EvaluationCase> cases = selectCases(allCases, properties.getCaseIds(), properties.getMaxCases());
         List<String> questions = cases.stream().map(EvaluationCase::question).toList();
         EmbeddingClient.EmbeddingUsageResult queryEmbeddings = embeddingClient.embedWithUsage(
                 questions,
@@ -208,6 +208,11 @@ public class RagEvaluationExecutor {
                 long rerankLatencyMs = elapsedMillis(rerankStartedAt);
                 boolean rerankFallback = !hasCompleteRerank(ranked, candidates.size(), properties.getTopK());
                 List<RetrievedPassage> rerankTopK = selectReranked(candidates, ranked, properties.getTopK());
+                List<RerankScoreSnapshot> rerankScores = snapshotRerankScores(
+                        candidates,
+                        ranked,
+                        properties.getTopK()
+                );
 
                 GeneratedAnswer baselineAnswer = generateAnswer(evaluationCase, baselineTopK);
                 GeneratedAnswer rerankAnswer = generateAnswer(evaluationCase, rerankTopK);
@@ -220,6 +225,7 @@ public class RagEvaluationExecutor {
                         "baseline",
                         candidateSnapshot,
                         baselineTopK,
+                        List.of(),
                         baselineAnswer,
                         retrievalLatencyMs,
                         0,
@@ -230,6 +236,7 @@ public class RagEvaluationExecutor {
                         "rerank",
                         candidateSnapshot,
                         rerankTopK,
+                        rerankScores,
                         rerankAnswer,
                         retrievalLatencyMs,
                         rerankLatencyMs,
@@ -281,6 +288,8 @@ public class RagEvaluationExecutor {
                 result.citedPassageIds(),
                 elapsedMillis(startedAt),
                 result.parseError(),
+                result.supported(),
+                result.supportReason(),
                 result.promptTokens(),
                 result.completionTokens(),
                 result.modelVersion(),
@@ -292,6 +301,7 @@ public class RagEvaluationExecutor {
                                        String variant,
                                        List<CandidateSnapshot> candidates,
                                        List<RetrievedPassage> selected,
+                                       List<RerankScoreSnapshot> rerankScores,
                                        GeneratedAnswer answer,
                                        long retrievalLatencyMs,
                                        long rerankLatencyMs,
@@ -301,6 +311,7 @@ public class RagEvaluationExecutor {
                 variant,
                 candidates,
                 selected.stream().map(RetrievedPassage::passageId).toList(),
+                rerankScores,
                 answer.answer(),
                 answer.citedPassageIds(),
                 retrievalLatencyMs + rerankLatencyMs + answer.generationLatencyMs(),
@@ -310,6 +321,8 @@ public class RagEvaluationExecutor {
                 rerankFallback,
                 answer.generated(),
                 answer.parseError(),
+                answer.supported(),
+                answer.supportReason(),
                 answer.promptTokens(),
                 answer.completionTokens(),
                 answer.modelVersion()
@@ -387,6 +400,30 @@ public class RagEvaluationExecutor {
             }
         }
         return selectedIndices.stream().map(candidates::get).toList();
+    }
+
+    static List<RerankScoreSnapshot> snapshotRerankScores(List<RetrievedPassage> candidates,
+                                                          List<RerankClient.RerankResult> ranked,
+                                                          int topK) {
+        if (!hasCompleteRerank(ranked, candidates.size(), topK)) {
+            return List.of();
+        }
+        LinkedHashSet<Integer> selectedIndices = new LinkedHashSet<>();
+        List<RerankScoreSnapshot> snapshots = new ArrayList<>();
+        for (RerankClient.RerankResult result : ranked) {
+            if (result.index() >= 0
+                    && result.index() < candidates.size()
+                    && selectedIndices.add(result.index())) {
+                snapshots.add(new RerankScoreSnapshot(
+                        candidates.get(result.index()).passageId(),
+                        result.score()
+                ));
+            }
+            if (snapshots.size() >= Math.min(topK, candidates.size())) {
+                break;
+            }
+        }
+        return List.copyOf(snapshots);
     }
 
     static boolean hasCompleteRerank(List<RerankClient.RerankResult> ranked,
@@ -492,11 +529,39 @@ public class RagEvaluationExecutor {
         return dimension;
     }
 
-    private List<EvaluationCase> limitedCases(List<EvaluationCase> cases) {
-        if (properties.getMaxCases() <= 0 || properties.getMaxCases() >= cases.size()) {
+    static List<EvaluationCase> selectCases(List<EvaluationCase> cases,
+                                            List<String> requestedCaseIds,
+                                            int maxCases) {
+        if (requestedCaseIds != null && !requestedCaseIds.isEmpty()) {
+            LinkedHashSet<String> requested = new LinkedHashSet<>();
+            for (String caseId : requestedCaseIds) {
+                if (caseId == null || caseId.isBlank()) {
+                    throw new IllegalArgumentException("rag.evaluation.case-ids cannot contain blank IDs");
+                }
+                if (!requested.add(caseId)) {
+                    throw new IllegalArgumentException("rag.evaluation.case-ids contains duplicate ID: " + caseId);
+                }
+            }
+            if (maxCases > 0) {
+                throw new IllegalArgumentException(
+                        "rag.evaluation.case-ids cannot be combined with rag.evaluation.max-cases");
+            }
+            Map<String, EvaluationCase> casesById = new LinkedHashMap<>();
+            for (EvaluationCase evaluationCase : cases) {
+                casesById.put(evaluationCase.caseId(), evaluationCase);
+            }
+            List<String> missing = requested.stream()
+                    .filter(caseId -> !casesById.containsKey(caseId))
+                    .toList();
+            if (!missing.isEmpty()) {
+                throw new IllegalArgumentException("Unknown rag.evaluation.case-ids: " + missing);
+            }
+            return requested.stream().map(casesById::get).toList();
+        }
+        if (maxCases <= 0 || maxCases >= cases.size()) {
             return cases;
         }
-        return List.copyOf(cases.subList(0, properties.getMaxCases()));
+        return List.copyOf(cases.subList(0, maxCases));
     }
 
     private void validateConfiguration() {
@@ -509,6 +574,12 @@ public class RagEvaluationExecutor {
         }
         if (properties.getMaxCases() < 0) {
             throw new IllegalArgumentException("rag.evaluation.max-cases cannot be negative");
+        }
+        if (properties.getCaseIds() != null
+                && !properties.getCaseIds().isEmpty()
+                && properties.getMaxCases() > 0) {
+            throw new IllegalArgumentException(
+                    "rag.evaluation.case-ids cannot be combined with rag.evaluation.max-cases");
         }
     }
 
@@ -722,16 +793,21 @@ public class RagEvaluationExecutor {
     public record CandidateSnapshot(String passageId, double esScore) {
     }
 
+    public record RerankScoreSnapshot(String passageId, double score) {
+    }
+
     record GeneratedAnswer(String answer,
                            List<String> citedPassageIds,
                            long generationLatencyMs,
                            boolean parseError,
+                           boolean supported,
+                           String supportReason,
                            int promptTokens,
                            int completionTokens,
                            String modelVersion,
                            boolean generated) {
         static GeneratedAnswer notGenerated() {
-            return new GeneratedAnswer("", List.of(), 0, false, 0, 0, "disabled", false);
+            return new GeneratedAnswer("", List.of(), 0, false, false, "", 0, 0, "disabled", false);
         }
     }
 
@@ -739,6 +815,7 @@ public class RagEvaluationExecutor {
                              String variant,
                              List<CandidateSnapshot> candidates,
                              List<String> retrievedPassageIds,
+                             List<RerankScoreSnapshot> rerankScores,
                              String answer,
                              List<String> citedPassageIds,
                              long latencyMs,
@@ -748,6 +825,8 @@ public class RagEvaluationExecutor {
                              boolean rerankFallback,
                              boolean answerGenerated,
                              boolean generationParseError,
+                             boolean answerSupported,
+                             String supportReason,
                              int promptTokens,
                              int completionTokens,
                              String answerModel) {

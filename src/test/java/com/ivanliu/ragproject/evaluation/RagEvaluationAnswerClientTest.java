@@ -23,19 +23,20 @@ class RagEvaluationAnswerClientTest {
     @Test
     void parsesJsonAnswerAndKeepsOnlyRetrievedCitations() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "```json\n{\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-2\",\"p-2\"]}\n```",
+                "```json\n{\"supported\":true,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-2\",\"p-2\"],\"supportReason\":\"p-2 states the answer\"}\n```",
                 passages()
         );
 
         assertEquals("Ada Lovelace", answer.answer());
         assertEquals(List.of("p-2"), answer.citedPassageIds());
         assertFalse(answer.parseError());
+        assertTrue(answer.supported());
     }
 
     @Test
     void marksHallucinatedCitationAsParseError() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "{\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"not-retrieved\"]}",
+                "{\"supported\":true,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"not-retrieved\"],\"supportReason\":\"claimed support\"}",
                 passages()
         );
 
@@ -46,13 +47,36 @@ class RagEvaluationAnswerClientTest {
     @Test
     void canonicalizesAbstentionAndRemovesCitations() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "{\"answer\":\"insufficient_evidence\",\"citedPassageIds\":[\"p-1\"]}",
+                "{\"supported\":false,\"answer\":\"INSUFFICIENT_EVIDENCE\",\"citedPassageIds\":[],\"supportReason\":\"The required relationship is absent\"}",
                 passages()
         );
 
         assertEquals("INSUFFICIENT_EVIDENCE", answer.answer());
         assertEquals(List.of(), answer.citedPassageIds());
         assertFalse(answer.parseError());
+        assertFalse(answer.supported());
+    }
+
+    @Test
+    void flagsInconsistentSupportDecisionAndCanonicalizesAbstention() {
+        RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
+                "{\"supported\":false,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-1\"],\"supportReason\":\"not supported\"}",
+                passages()
+        );
+
+        assertEquals("INSUFFICIENT_EVIDENCE", answer.answer());
+        assertEquals(List.of(), answer.citedPassageIds());
+        assertTrue(answer.parseError());
+        assertFalse(answer.supported());
+    }
+
+    @Test
+    void promptRequiresExactEntailmentRatherThanTopicOverlap() {
+        String systemPrompt = client.buildMessages("question", passages()).get(0).get("content");
+
+        assertTrue(systemPrompt.contains("strict evidence-entailment judge"));
+        assertTrue(systemPrompt.contains("repaired or substituted premise"));
+        assertTrue(systemPrompt.contains("INSUFFICIENT_EVIDENCE"));
     }
 
     @Test

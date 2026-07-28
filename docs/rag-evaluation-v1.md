@@ -152,6 +152,15 @@ uses external APIs for 1,226 passage embeddings, 150 question embeddings, 150 re
 `--rag.evaluation.max-cases=2 --rag.evaluation.generate-answers=false`; partial-case output is only a
 smoke artifact and must not be passed off as a benchmark result.
 
+To retry specific failed cases without rebuilding the frozen index, use `mode=run`, a separate output
+directory, and a comma-separated exact ID list, for example
+`--rag.evaluation.case-ids=case-a,case-b`. Do not combine `case-ids` with `max-cases`. Validate the
+retry output before replacing the matching paired rows in the complete prediction file.
+
+After validating the retry metadata and confirming `rerankFallback=false`, merge complete pairs with
+`scripts/merge_rag_eval_retry.py`. When overwriting the canonical prediction file, pass `--backup`
+so the pre-retry artifact remains available for audit and recovery.
+
 Outputs are written to `evaluation/runs/rag-eval-en-v1` by default:
 
 - `predictions.jsonl`: paired baseline/rerank rows consumed by the Python scorer;
@@ -171,14 +180,24 @@ enables the provider's JSON output mode:
 
 ```json
 {
+  "supported": true,
   "answer": "short answer or INSUFFICIENT_EVIDENCE",
-  "citedPassageIds": ["hotpotqa-..."]
+  "citedPassageIds": ["hotpotqa-..."],
+  "supportReason": "short evidence check"
 }
 ```
 
+The v3 answer contract treats retrieval relevance as separate from answer support. Every entity,
+relationship, qualifier, comparison, quantity, and negation required by the question must be directly
+entailed by the cited passages. Topic overlap, answer-like spans, repaired premises, and outside
+knowledge are insufficient. `supported=false` forces the canonical abstention and an empty citation
+list.
+
 Only IDs from the supplied Top 5 are accepted. Invalid citations are removed and recorded through
 `generationParseError`; the scorer also rejects prediction files whose citations fall outside the
-reported Top 5.
+reported Top 5. Rerank rows also persist the selected passage IDs and calibrated rerank scores so a
+relevance threshold can be calibrated against answerable and unanswerable validation cases instead
+of being chosen heuristically.
 
 For the 120 HotpotQA cases, report:
 
