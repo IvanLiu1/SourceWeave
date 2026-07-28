@@ -21,7 +21,7 @@ import java.util.Set;
 @Component
 public class RagEvaluationAnswerClient {
 
-    static final String PROMPT_VERSION = "rag-eval-answer-v4";
+    static final String PROMPT_VERSION = "rag-eval-answer-v5";
     static final String ABSTENTION = "INSUFFICIENT_EVIDENCE";
 
     private final ModelProviderConfigService modelProviderConfigService;
@@ -141,9 +141,12 @@ public class RagEvaluationAnswerClient {
                 + "Only after the complete premise passes, decide whether the passages explicitly entail a complete answer to the exact question. "
                 + "Semantic relevance, lexical overlap, a nearby answer-like phrase, a repaired or substituted premise, an implication that reverses the statement, "
                 + "and plausible outside knowledge are not sufficient. Use only direct statements or unambiguous paraphrases from the passages. "
-                + "Return exactly one JSON object with this schema: "
-                + "{\"questionPremiseSupported\":true,\"supported\":true,\"answer\":\"short answer or INSUFFICIENT_EVIDENCE\","
-                + "\"citedPassageIds\":[\"passage-id\"],\"supportReason\":\"short evidence check\"}. "
+                + "Return exactly one JSON object with this field order: "
+                + "{\"supportReason\":\"one decisive evidence check of at most 30 words\","
+                + "\"questionPremiseSupported\":true,\"supported\":true,"
+                + "\"answer\":\"short answer or INSUFFICIENT_EVIDENCE\",\"citedPassageIds\":[\"passage-id\"]}. "
+                + "Write supportReason first, then set both booleans consistently from that completed check. "
+                + "Do not deliberate, self-correct, or repeat analysis in the JSON. "
                 + "If questionPremiseSupported is false, supported must also be false. When supported is false, "
                 + "answer must be exactly INSUFFICIENT_EVIDENCE and citedPassageIds must be empty. "
                 + "When supported is true, each cited passage must directly support the answer and every required part of the question. "
@@ -221,6 +224,7 @@ public class RagEvaluationAnswerClient {
                 if (ABSTENTION.equalsIgnoreCase(answer)) {
                     answer = ABSTENTION;
                     citations.clear();
+                    supported = false;
                 }
             }
             return new ParsedAnswer(

@@ -182,20 +182,21 @@ enables the provider's JSON output mode:
 
 ```json
 {
+  "supportReason": "one decisive evidence check of at most 30 words",
   "questionPremiseSupported": true,
   "supported": true,
   "answer": "short answer or INSUFFICIENT_EVIDENCE",
-  "citedPassageIds": ["hotpotqa-..."],
-  "supportReason": "short evidence check"
+  "citedPassageIds": ["hotpotqa-..."]
 }
 ```
 
-The v4 answer contract treats retrieval relevance, question-premise support, and answer support as
+The v5 answer contract treats retrieval relevance, question-premise support, and answer support as
 separate decisions. Every entity, relationship, qualifier, comparison, quantity, and polarity in the
 question is immutable and must match the cited passages before an answer can be supported. Topic
 overlap, answer-like spans, repaired premises, reversed implications, and outside knowledge are
-insufficient. `questionPremiseSupported=false` or `supported=false` forces the canonical abstention
-and an empty citation list.
+insufficient. The model must write a short evidence check before committing to either boolean, which
+prevents late self-correction after a premature support decision. `questionPremiseSupported=false` or
+`supported=false` forces the canonical abstention and an empty citation list.
 
 Only IDs from the supplied Top 5 are accepted. Invalid citations are removed and recorded through
 `generationParseError`; the scorer also rejects prediction files whose citations fall outside the

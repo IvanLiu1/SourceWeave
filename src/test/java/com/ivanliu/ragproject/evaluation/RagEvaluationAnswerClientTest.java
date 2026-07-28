@@ -84,12 +84,27 @@ class RagEvaluationAnswerClientTest {
     }
 
     @Test
+    void canonicalizesReportedSupportWhenTheAnswerIsAnAbstention() {
+        RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
+                "{\"supportReason\":\"No passage answers the question\",\"questionPremiseSupported\":true,\"supported\":true,\"answer\":\"INSUFFICIENT_EVIDENCE\",\"citedPassageIds\":[]}",
+                passages()
+        );
+
+        assertEquals("INSUFFICIENT_EVIDENCE", answer.answer());
+        assertTrue(answer.parseError());
+        assertFalse(answer.supported());
+    }
+
+    @Test
     void promptRequiresExactEntailmentRatherThanTopicOverlap() {
         String systemPrompt = client.buildMessages("question", passages()).get(0).get("content");
 
         assertTrue(systemPrompt.contains("strict evidence-entailment judge"));
         assertTrue(systemPrompt.contains("questionPremiseSupported"));
         assertTrue(systemPrompt.contains("did not join"));
+        assertTrue(systemPrompt.contains("{\"supportReason\":\"one decisive evidence check of at most 30 words\","
+                + "\"questionPremiseSupported\":true"));
+        assertTrue(systemPrompt.contains("at most 30 words"));
         assertTrue(systemPrompt.contains("repaired or substituted premise"));
         assertTrue(systemPrompt.contains("INSUFFICIENT_EVIDENCE"));
     }
