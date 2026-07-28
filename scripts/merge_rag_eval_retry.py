@@ -49,7 +49,9 @@ def index_rows(rows: list[dict[str, Any]], label: str) -> dict[tuple[str, str], 
 
 
 def merge_rows(
-    original: list[dict[str, Any]], retry: list[dict[str, Any]]
+    original: list[dict[str, Any]],
+    retry: list[dict[str, Any]],
+    append_missing: bool = False,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     original_by_key = index_rows(original, "original")
     retry_by_key = index_rows(retry, "retry")
@@ -62,13 +64,23 @@ def merge_rows(
         actual = {key for key in retry_by_key if key[0] == case_id}
         if actual != expected:
             raise MergeError(f"Retry case {case_id} must contain one baseline and one rerank row")
-        if not expected.issubset(original_by_key):
+        present = expected.intersection(original_by_key)
+        if present and present != expected:
+            raise MergeError(f"Original case {case_id} is an incomplete pair")
+        if not present and not append_missing:
             raise MergeError(f"Retry case {case_id} does not exist as a complete original pair")
         if retry_by_key[(case_id, "rerank")].get("rerankFallback") is not False:
             raise MergeError(f"Retry case {case_id} still has rerankFallback=true")
 
     merged = [retry_by_key.get(row_key(row), row) for row in original]
-    if len(merged) != len(original):
+    for case_id in retry_case_ids:
+        if (case_id, "baseline") not in original_by_key:
+            merged.append(retry_by_key[(case_id, "baseline")])
+            merged.append(retry_by_key[(case_id, "rerank")])
+    expected_size = len(original) + 2 * sum(
+        (case_id, "baseline") not in original_by_key for case_id in retry_case_ids
+    )
+    if len(merged) != expected_size:
         raise MergeError("Merged prediction count changed unexpectedly")
     return merged, retry_case_ids
 
@@ -93,6 +105,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--retry", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--backup", type=Path)
+    parser.add_argument(
+        "--append-missing",
+        action="store_true",
+        help="append complete retry pairs missing from a failed partial run",
+    )
     return parser.parse_args()
 
 
@@ -100,7 +117,7 @@ def main() -> None:
     args = parse_args()
     original = read_jsonl(args.original)
     retry = read_jsonl(args.retry)
-    merged, retry_case_ids = merge_rows(original, retry)
+    merged, retry_case_ids = merge_rows(original, retry, append_missing=args.append_missing)
     if args.backup:
         if args.backup.exists():
             raise MergeError(f"Backup already exists: {args.backup}")

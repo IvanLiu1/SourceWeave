@@ -159,7 +159,9 @@ retry output before replacing the matching paired rows in the complete predictio
 
 After validating the retry metadata and confirming `rerankFallback=false`, merge complete pairs with
 `scripts/merge_rag_eval_retry.py`. When overwriting the canonical prediction file, pass `--backup`
-so the pre-retry artifact remains available for audit and recovery.
+so the pre-retry artifact remains available for audit and recovery. If the original input is a failed
+`predictions.jsonl.partial`, pass `--append-missing`; the script still requires every appended case to
+contain exactly one baseline row and one non-fallback rerank row.
 
 Outputs are written to `evaluation/runs/rag-eval-en-v1` by default:
 

@@ -47,6 +47,22 @@ class MergeRagEvalRetryTest(unittest.TestCase):
                 prediction("case-1", "rerank", True),
             ])
 
+    def test_appends_complete_pairs_when_recovering_a_partial_run(self) -> None:
+        original = [prediction("case-1", "baseline"), prediction("case-1", "rerank")]
+        retry = [prediction("case-2", "baseline"), prediction("case-2", "rerank")]
+
+        with self.assertRaises(MergeError):
+            merge_rows(original, retry)
+
+        merged, case_ids = merge_rows(original, retry, append_missing=True)
+
+        self.assertEqual(["case-2"], case_ids)
+        self.assertEqual(
+            [("case-1", "baseline"), ("case-1", "rerank"),
+             ("case-2", "baseline"), ("case-2", "rerank")],
+            [(row["caseId"], row["variant"]) for row in merged],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
