@@ -66,7 +66,9 @@ class LlmProviderRouterLocaleTest {
         String systemPrompt = systemPrompt(router.buildReActMessages("问题", "", List.of()));
 
         assertTrue(systemPrompt.contains("candidate evidence, not proof"));
-        assertTrue(systemPrompt.contains("explicitly entails the answer to the exact question"));
+        assertTrue(systemPrompt.contains("explicitly entails the complete answer to the exact question"));
+        assertTrue(systemPrompt.contains("subject, object, relationship, quantity"));
+        assertTrue(systemPrompt.contains("did not join"));
         assertTrue(systemPrompt.contains("LOW_CONFIDENCE"));
         assertFalse(systemPrompt.contains("must answer whenever"));
     }

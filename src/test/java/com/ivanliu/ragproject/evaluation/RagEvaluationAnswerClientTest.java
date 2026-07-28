@@ -23,7 +23,7 @@ class RagEvaluationAnswerClientTest {
     @Test
     void parsesJsonAnswerAndKeepsOnlyRetrievedCitations() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "```json\n{\"supported\":true,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-2\",\"p-2\"],\"supportReason\":\"p-2 states the answer\"}\n```",
+                "```json\n{\"questionPremiseSupported\":true,\"supported\":true,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-2\",\"p-2\"],\"supportReason\":\"p-2 states the answer\"}\n```",
                 passages()
         );
 
@@ -36,7 +36,7 @@ class RagEvaluationAnswerClientTest {
     @Test
     void marksHallucinatedCitationAsParseError() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "{\"supported\":true,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"not-retrieved\"],\"supportReason\":\"claimed support\"}",
+                "{\"questionPremiseSupported\":true,\"supported\":true,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"not-retrieved\"],\"supportReason\":\"claimed support\"}",
                 passages()
         );
 
@@ -47,7 +47,7 @@ class RagEvaluationAnswerClientTest {
     @Test
     void canonicalizesAbstentionAndRemovesCitations() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "{\"supported\":false,\"answer\":\"INSUFFICIENT_EVIDENCE\",\"citedPassageIds\":[],\"supportReason\":\"The required relationship is absent\"}",
+                "{\"questionPremiseSupported\":true,\"supported\":false,\"answer\":\"INSUFFICIENT_EVIDENCE\",\"citedPassageIds\":[],\"supportReason\":\"The required relationship is absent\"}",
                 passages()
         );
 
@@ -60,7 +60,20 @@ class RagEvaluationAnswerClientTest {
     @Test
     void flagsInconsistentSupportDecisionAndCanonicalizesAbstention() {
         RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
-                "{\"supported\":false,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-1\"],\"supportReason\":\"not supported\"}",
+                "{\"questionPremiseSupported\":true,\"supported\":false,\"answer\":\"Ada Lovelace\",\"citedPassageIds\":[\"p-1\"],\"supportReason\":\"not supported\"}",
+                passages()
+        );
+
+        assertEquals("INSUFFICIENT_EVIDENCE", answer.answer());
+        assertEquals(List.of(), answer.citedPassageIds());
+        assertTrue(answer.parseError());
+        assertFalse(answer.supported());
+    }
+
+    @Test
+    void rejectsAnAnswerWhenTheQuestionPremiseIsContradicted() {
+        RagEvaluationAnswerClient.ParsedAnswer answer = client.parseAnswer(
+                "{\"questionPremiseSupported\":false,\"supported\":true,\"answer\":\"73\",\"citedPassageIds\":[\"p-1\"],\"supportReason\":\"question says 139 but passage says 129\"}",
                 passages()
         );
 
@@ -75,6 +88,8 @@ class RagEvaluationAnswerClientTest {
         String systemPrompt = client.buildMessages("question", passages()).get(0).get("content");
 
         assertTrue(systemPrompt.contains("strict evidence-entailment judge"));
+        assertTrue(systemPrompt.contains("questionPremiseSupported"));
+        assertTrue(systemPrompt.contains("did not join"));
         assertTrue(systemPrompt.contains("repaired or substituted premise"));
         assertTrue(systemPrompt.contains("INSUFFICIENT_EVIDENCE"));
     }

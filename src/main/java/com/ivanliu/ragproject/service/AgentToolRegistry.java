@@ -49,7 +49,7 @@ public class AgentToolRegistry {
     private double lowScoreWarnThreshold;
 
     /** Calibrated rerank results below this score are withheld from the answer model. */
-    @Value("${agent.search.hard-reject-threshold:0.4}")
+    @Value("${agent.search.hard-reject-threshold:0.2}")
     private double hardRejectThreshold;
 
     public AgentToolRegistry(HybridSearchService hybridSearchService,

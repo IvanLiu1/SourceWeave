@@ -197,8 +197,9 @@ embedding:
 
 agent:
   search:
-    # Rerank 校准分（0~1）低于该阈值时，不把候选片段交给生成模型，避免低置信度强答。
-    hard-reject-threshold: ${AGENT_SEARCH_HARD_REJECT_THRESHOLD:0.4}
+    # Rerank 校准分（0~1）低于该阈值时，不把候选片段交给生成模型。
+    # 0.2 由 rag-eval-en-v1 的可回答/不可回答样本校准；请用本地数据集重新校准后再调高。
+    hard-reject-threshold: ${AGENT_SEARCH_HARD_REJECT_THRESHOLD:0.2}
     # 高于硬拒答阈值但低于该值时，仍向模型提供检索质量警告。
     low-score-warn-threshold: ${AGENT_SEARCH_LOW_SCORE_THRESHOLD:0.4}
 

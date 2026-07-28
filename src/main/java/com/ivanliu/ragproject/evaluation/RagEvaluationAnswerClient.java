@@ -21,7 +21,7 @@ import java.util.Set;
 @Component
 public class RagEvaluationAnswerClient {
 
-    static final String PROMPT_VERSION = "rag-eval-answer-v3";
+    static final String PROMPT_VERSION = "rag-eval-answer-v4";
     static final String ABSTENTION = "INSUFFICIENT_EVIDENCE";
 
     private final ModelProviderConfigService modelProviderConfigService;
@@ -134,14 +134,18 @@ public class RagEvaluationAnswerClient {
     List<Map<String, String>> buildMessages(String question,
                                             List<RagEvaluationExecutor.RetrievedPassage> passages) {
         String systemPrompt = "You are a strict evidence-entailment judge for deterministic RAG evaluation. "
-                + "First decide whether the supplied passages explicitly entail a complete answer to the exact question. "
-                + "Every entity, relationship, quantity, qualifier, comparison, and negation must be supported. "
-                + "Semantic relevance, lexical overlap, a nearby answer-like phrase, a repaired or substituted premise, "
+                + "First check the question's premise word by word. Its subject, object, relationship, quantity, qualifier, comparison, and polarity are immutable. "
+                + "Never silently correct, reinterpret, or substitute them. A changed entity, number, relationship, or polarity is a contradiction, not a close match. "
+                + "For example, if the question says 'did not join' but a passage says 'joined', says 139 but a passage says 129, "
+                + "or asks about entity A while a passage describes entity B, questionPremiseSupported must be false. "
+                + "Only after the complete premise passes, decide whether the passages explicitly entail a complete answer to the exact question. "
+                + "Semantic relevance, lexical overlap, a nearby answer-like phrase, a repaired or substituted premise, an implication that reverses the statement, "
                 + "and plausible outside knowledge are not sufficient. Use only direct statements or unambiguous paraphrases from the passages. "
                 + "Return exactly one JSON object with this schema: "
-                + "{\"supported\":true,\"answer\":\"short answer or INSUFFICIENT_EVIDENCE\","
+                + "{\"questionPremiseSupported\":true,\"supported\":true,\"answer\":\"short answer or INSUFFICIENT_EVIDENCE\","
                 + "\"citedPassageIds\":[\"passage-id\"],\"supportReason\":\"short evidence check\"}. "
-                + "When supported is false, answer must be exactly INSUFFICIENT_EVIDENCE and citedPassageIds must be empty. "
+                + "If questionPremiseSupported is false, supported must also be false. When supported is false, "
+                + "answer must be exactly INSUFFICIENT_EVIDENCE and citedPassageIds must be empty. "
                 + "When supported is true, each cited passage must directly support the answer and every required part of the question. "
                 + "Do not add markdown or text outside the JSON object.";
 
@@ -177,7 +181,13 @@ public class RagEvaluationAnswerClient {
             if (supportedNode == null || !supportedNode.isBoolean()) {
                 throw new IllegalArgumentException("supported must be a boolean");
             }
-            boolean supported = supportedNode.asBoolean();
+            JsonNode premiseNode = root.get("questionPremiseSupported");
+            if (premiseNode == null || !premiseNode.isBoolean()) {
+                throw new IllegalArgumentException("questionPremiseSupported must be a boolean");
+            }
+            boolean reportedSupported = supportedNode.asBoolean();
+            boolean questionPremiseSupported = premiseNode.asBoolean();
+            boolean supported = reportedSupported && questionPremiseSupported;
             String answer = root.path("answer").asText("").trim();
             if (answer.isBlank()) {
                 throw new IllegalArgumentException("answer is empty");
@@ -198,7 +208,8 @@ public class RagEvaluationAnswerClient {
                 invalidCitation = true;
             }
             String supportReason = root.path("supportReason").asText("").trim();
-            boolean schemaMismatch = supportReason.isBlank();
+            boolean schemaMismatch = supportReason.isBlank()
+                    || (reportedSupported && !questionPremiseSupported);
             if (!supported) {
                 schemaMismatch = schemaMismatch
                         || !ABSTENTION.equalsIgnoreCase(answer)
