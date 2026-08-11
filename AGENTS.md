@@ -21,10 +21,9 @@ Use this file as the first repo-local reference before making changes.
 When a new agent thread starts in this repo, check these in order:
 
 1. `AGENTS.md`
-2. `CLAUDE.md`
-3. repo root `.env` and `src/main/resources/application*.yml`
-4. `frontend/.env*`
-5. current runtime state: frontend dev server, backend process, ports, and browser behavior
+2. repo root `.env` and `src/main/resources/application*.yml`
+3. `frontend/.env*`
+4. current runtime state: frontend dev server, backend process, ports, and browser behavior
 
 Do not assume generic Spring Boot conventions before checking the actual local setup.
 
