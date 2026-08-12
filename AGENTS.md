@@ -1,231 +1,189 @@
 # AGENTS.md
 
-This file is the agent-facing working agreement for the `ragproject` repository.
+This is the working agreement for agents modifying the SourceWeave repository.
 
-## Purpose
+## Project
 
-SourceWeave is an enterprise AI knowledge management system built around a RAG workflow:
+SourceWeave is an enterprise RAG knowledge-management system:
 
-- Spring Boot backend
+- Spring Boot backend (Java 17)
 - Vue 3 + TypeScript frontend
-- MySQL for primary persistence
-- Redis for cache/session/short-lived chat context
+- MySQL for durable application data
+- Redis for cache, sessions, rate limits, and short-lived chat state
 - Elasticsearch for retrieval
-- Kafka for async file processing
+- Kafka for asynchronous document processing
 - MinIO for object storage
 
-Use this file as the first repo-local reference before making changes.
+Prefer small, end-to-end fixes that follow existing repository patterns.
 
 ## First Read
 
-When a new agent thread starts in this repo, check these in order:
+At the start of a new thread, inspect in this order:
 
 1. `AGENTS.md`
 2. repo root `.env` and `src/main/resources/application*.yml`
 3. `frontend/.env*`
-4. current runtime state: frontend dev server, backend process, ports, and browser behavior
+4. current runtime state: backend process, frontend dev server, ports, and browser behavior
 
-Do not assume generic Spring Boot conventions before checking the actual local setup.
+Do not assume generic Spring Boot or Vite defaults before checking the local setup.
 
-## Local Runtime Rules
+## Local Runtime
 
 ### Backend
 
-This project is typically run from the IDE with hot deployment.
+The backend is normally started from the IDE with hot deployment.
 
-Important:
-
-- Do not restart the backend by default.
-- After changing Java code, prefer compiling to trigger hot reload:
+- Default local address: `http://localhost:8081`
+- Do not restart it by default.
+- After Java changes, compile to trigger hot reload:
 
 ```bash
 mvn -q -DskipTests compile
 ```
 
-- Only attempt a manual restart if the user explicitly asks for it or if runtime evidence proves hot reload is not active.
+Restart only when the user asks or runtime evidence shows hot reload is inactive.
 
 ### Frontend
 
-The frontend is usually already running in dev mode.
+The frontend is normally already running in Vite dev mode.
 
-Preferred validation target:
+- Default local address: `http://localhost:9527`
+- `pnpm run dev` uses Vite `test` mode.
+- Use Node 20 and pnpm 10 when reproducing CI behavior.
+- Do not use a full build/deploy loop when the live dev server is sufficient.
 
-```text
-http://localhost:9527
-```
+### Infrastructure
 
-Do not waste time on full rebuild/deploy loops when the local dev server is already live.
+Typical local dependencies are:
 
-### Browser Verification
+- MySQL: `localhost:3306`
+- Redis: `localhost:6379`
+- Elasticsearch: `localhost:9200`
+- Kafka: `localhost:9092`
+- MinIO: `localhost:9000`
 
-For UI or interaction bugs, verify in a real browser.
+Check actual listeners and configuration before diagnosing connectivity.
 
-Common pages:
+## Configuration
 
-- `http://localhost:9527/#/chat`
-- `http://localhost:9527/#/chat-history`
-
-When validating frontend issues:
-
-1. open the real page
-2. inspect network requests and response bodies
-3. inspect console output
-4. only then decide whether the bug is frontend, backend, data, or environment
-
-## Configuration Sources
-
-### Backend config
-
-Primary local config comes from:
+Backend configuration comes from:
 
 - repo root `.env`
 - `src/main/resources/application.yml`
 - `src/main/resources/application-dev.yml`
 
-Typical local values include:
-
-- MySQL on `localhost:3306`
-- Redis on `localhost:6379`
-- backend on `localhost:8081`
-
-The local `.env` may contain values with special characters. Do not casually `source .env` in shell snippets unless you know the contents are shell-safe.
-
-### Frontend config
-
-Primary frontend config comes from:
+Frontend configuration comes from:
 
 - `frontend/.env`
 - `frontend/.env.test`
-- Vite proxy/runtime env
+- `frontend/.env.prod`
+- Vite proxy/runtime configuration
 
-In local dev, the frontend proxies backend requests through the Vite dev server, so browser network requests may appear as:
+In local development, browser requests may use `/proxy-default/...` while the target backend API is
+`http://localhost:8081/api/v1`.
 
-- `/proxy-default/...`
+Do not casually `source .env`; values may not be shell-safe. Never print secrets, tokens, passwords,
+API keys, or complete token-bearing URLs. Redact sensitive values in logs and command output.
 
-even though the backend target is `http://localhost:8081/api/v1`.
+## Engineering Guardrails
 
-## Repo-Specific Engineering Notes
+### Persistence and chat history
 
-### Chat history
+- MySQL is the durable source of truth for conversation history.
+- Redis is only for short-lived context and session state.
+- Preserve citation/reference mappings through persistence and history rendering.
+- When history is missing, verify the browser request, backend response, MySQL rows, and loaded runtime code.
 
-- Redis is for short-lived chat context and session state.
-- Persistent history must live in MySQL.
-- When debugging chat history, inspect all three layers:
-  - browser request/response
-  - backend controller/service path
-  - database contents
+### Multi-tenancy
 
-Do not stop at “frontend shows empty”; verify whether:
+SourceWeave authorization depends on user identity, organization tags, role, and sometimes explicit
+query parameters. Verify all relevant filters when changing queries, documents, or admin views.
 
-- the request was sent
-- the backend returned an empty array
-- the database actually contains rows
-- the running backend has loaded the latest code
+### Retrieval and citations
 
-### Multi-tenant behavior
+- Treat rerank scores as ordering and observability signals, not answer confidence.
+- Do not suppress an answer or show a confidence warning solely because of an absolute rerank score.
+- Final abstention should depend on whether cited evidence entails the answer.
+- Preserve `fileMd5`, `chunkId`, `pageNumber`, and `anchorText` through retrieval and preview flows.
 
-SourceWeave uses organization tags and user/org relationships.
+### Tests
 
-When changing queries or admin views, verify whether filtering is driven by:
+- Prefer targeted tests before the full suite.
+- Unit tests must not depend on local MySQL, Kafka, Redis, Elasticsearch, or MinIO unless explicitly
+  written as integration tests.
+- Be aware that the root `.env` can affect Spring profile selection; verify the active test profile.
+- Do not interpret sandbox-blocked local network access as an application failure without confirming it.
 
-- user identity
-- org tag
-- role
-- explicit query params
+## Validation
 
-Do not assume “missing data” is only a UI issue; it may be an unintended filter.
-
-### References / retrieval evidence
-
-If a chat response contains reference mappings, preserve them through persistence and history rendering. Do not regress the reference preview path when changing chat history storage.
-
-## Preferred Commands
-
-### Backend
-
-Compile only:
+Backend:
 
 ```bash
 mvn -q -DskipTests compile
-```
-
-Run tests when needed:
-
-```bash
 mvn test
 ```
 
-### Frontend
-
-Targeted lint:
+Frontend:
 
 ```bash
-cd frontend && pnpm exec eslint <file>
+cd frontend
+pnpm exec eslint <file>
+pnpm typecheck
+pnpm build
 ```
 
-Type check:
+Use only the checks relevant to the change, but validate both sides when behavior crosses the frontend
+and backend boundary.
 
-```bash
-cd frontend && pnpm typecheck
-```
+For UI or interaction changes, use a real browser. Common pages:
 
-## Editing Guidance
+- `http://localhost:9527/#/chat`
+- `http://localhost:9527/#/chat-history`
 
-- Preserve existing repo patterns.
-- Prefer minimal, end-to-end fixes over speculative refactors.
-- If a change touches frontend and backend behavior, verify both sides.
-- If a fix depends on runtime state, re-run the natural validation path after the change.
+Inspect the visible behavior, network requests and response bodies, and console output before deciding
+whether the issue is frontend, backend, data, or environment.
 
-## What To Avoid
+## Git Workflow
 
-- Do not assume restart-first backend workflows.
-- Do not assume Redis means durable persistence.
-- Do not claim a UI issue is fixed without checking the live page.
-- Do not change shell startup files or global environment for temporary repo tests.
-- Do not rely only on source inspection when runtime evidence is cheap to collect.
+Keep unrelated user changes and untracked files out of commits.
+
+For small, low-risk changes such as documentation, agent instructions, wording, and narrowly scoped
+configuration cleanup:
+
+1. stay on `main`
+2. stage only the intended files
+3. commit with a concise message
+4. push directly to `origin/main`
+5. do not create a branch or pull request
+
+For business logic, security-sensitive behavior, schema or data migrations, dependency upgrades, or
+larger cross-layer changes, use a `codex/` branch and a pull request unless the user explicitly requests
+direct delivery.
+
+Never publish `evaluation/runs/` or other local experiment artifacts unless the user explicitly names
+the report to publish.
+
+## RAG Evaluation
+
+- Committed suite: `rag-eval-en-v1` (120 answerable HotpotQA cases and 30 unanswerable SQuAD 2.0 cases).
+- Current answer contract: `rag-eval-answer-v5`.
+- Keep the Elasticsearch index fingerprint frozen when comparing prompt or rerank variants.
+- Answer-only reruns do not require passage re-vectorization.
+- The current `0.2` hard gate and `0.4` soft warning are known technical debt and must not be treated as
+  reliable answer-confidence thresholds.
+- The current default reranker is `gte-rerank-v2`. Evaluate `qwen3-rerank` in Q&A instruction mode on
+  production-like queries before changing the default.
+- Track unnecessary refusal, unsupported-answer rate, retries, and latency in addition to benchmark scores.
 
 ## Done Criteria
 
-A task is not complete if any of these are still unclear:
+A task is complete only when the relevant evidence is clear:
 
-- which runtime is active
-- whether the latest code is actually loaded
-- what the browser request returned
-- whether the backing data store contains the expected data
+1. the intended code or documentation changed
+2. appropriate compile, test, lint, type-check, or build checks ran
+3. the active runtime loaded the new code when runtime behavior matters
+4. browser behavior and network responses were verified for UI work
+5. MySQL, Redis, Elasticsearch, Kafka, or MinIO state was checked when the symptom is data-related
 
-For this repo, “done” usually means:
-
-1. code changed
-2. backend compiled
-3. browser re-tested
-4. network response confirmed
-5. any relevant DB/Redis state checked when the symptom is data-related
-
-## Current RAG Evaluation State
-
-The committed English evaluation suite is `rag-eval-en-v1` (120 answerable HotpotQA cases and
-30 unanswerable SQuAD 2.0 cases). Keep its Elasticsearch index fingerprint frozen when comparing
-prompt or rerank variants; normal answer-only reruns do not require passage re-vectorization.
-
-The latest answer contract is `rag-eval-answer-v5`. It checks the question premise before answer
-support and writes the evidence check before the decision fields. On the latest 30-case slices:
-
-- rerank on: HotpotQA Answer EM 60.00%, Token F1 75.41%, answer rate 90.00%
-- rerank off: HotpotQA Answer EM 36.67%, Token F1 49.33%, answer rate 60.00%
-- rerank on: SQuAD 2.0 correct abstention 76.67% (23/30)
-- rerank off: SQuAD 2.0 correct abstention 70.00% (21/30)
-
-Do not interpret a rerank relevance score as answer confidence. Production use showed that valid,
-fully supported answers can have a low absolute rerank score and receive a harmful low-confidence
-warning. The validation set also contains a fully answerable case whose best rerank score is 0.1843.
-The current `0.2` hard gate and `0.4` soft warning therefore need a follow-up change: keep rerank
-scores for ordering and observability, remove score-only answer suppression/warnings, and make final
-abstention depend on claim-to-citation entailment (preferably an independent verifier).
-
-The current default reranker is `gte-rerank-v2`. Alibaba's current documentation recommends moving
-to `qwen3-rerank`; evaluate its Q&A instruction mode on real production queries before changing the
-default. Calibrate retrieval behavior with production-like queries and track unnecessary refusal,
-unsupported-answer rate, retry count, and latency rather than optimizing only academic test cases.
-
-Evaluation run artifacts under `evaluation/runs/` are local and intentionally untracked unless the
-user explicitly asks to publish a specific report.
+If a required runtime is not running, report that limitation explicitly instead of claiming end-to-end
+verification.
