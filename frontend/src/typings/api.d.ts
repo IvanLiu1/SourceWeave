@@ -372,6 +372,11 @@ declare namespace Api {
       cmdToken: string;
     }
 
+    interface WebSocketTicket {
+      ticket: string;
+      expiresInSeconds: number;
+    }
+
     interface GenerationSnapshot {
       generationId: string;
       userId: string;

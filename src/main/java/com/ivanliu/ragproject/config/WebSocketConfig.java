@@ -18,6 +18,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private ChatWebSocketHandler chatWebSocketHandler;
 
+    @Autowired
+    private WebSocketTicketHandshakeInterceptor webSocketTicketHandshakeInterceptor;
+
     @Value("${security.allowed-origins:http://localhost:8080}")
     private String allowedOrigins;
 
@@ -27,7 +30,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toArray(String[]::new);
-        registry.addHandler(chatWebSocketHandler, "/chat/{token}")
+        registry.addHandler(chatWebSocketHandler, "/chat/{ticket}")
+                .addInterceptors(webSocketTicketHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);
     }
 }

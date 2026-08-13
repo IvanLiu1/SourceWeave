@@ -9,9 +9,9 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivanliu.ragproject.model.ChatWebSocketRequest;
+import com.ivanliu.ragproject.config.WebSocketTicketHandshakeInterceptor;
 import com.ivanliu.ragproject.service.ChatHandler;
 import com.ivanliu.ragproject.service.ChatSessionRegistry;
-import com.ivanliu.ragproject.utils.JwtUtils;
 import java.util.Map;
 
 @Component
@@ -25,27 +25,20 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ChatHandler chatHandler;
     private final ChatSessionRegistry chatSessionRegistry;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final JwtUtils jwtUtils;
     
     // 内部指令令牌 - 可以从配置文件读取
     private static final String INTERNAL_CMD_TOKEN = "WSS_STOP_CMD_" + System.currentTimeMillis() % 1000000;
 
-    public ChatWebSocketHandler(ChatHandler chatHandler, JwtUtils jwtUtils, ChatSessionRegistry chatSessionRegistry) {
+    public ChatWebSocketHandler(ChatHandler chatHandler, ChatSessionRegistry chatSessionRegistry) {
         this.chatHandler = chatHandler;
-        this.jwtUtils = jwtUtils;
         this.chatSessionRegistry = chatSessionRegistry;
     }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        String jwtToken;
+        String userId;
         try {
-            jwtToken = extractToken(session);
-            if (!jwtUtils.validateToken(jwtToken)) {
-                logger.debug("拒绝无效WebSocket连接，会话ID: {}", session.getId());
-                session.close(CloseStatus.POLICY_VIOLATION);
-                return;
-            }
+            userId = getAuthenticatedUserId(session);
         } catch (Exception exception) {
             logger.warn("拒绝非法WebSocket连接，会话ID: {}, 原因: {}", session.getId(), exception.getMessage());
             try {
@@ -56,10 +49,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        String userId = extractUserId(jwtToken);
         chatSessionRegistry.registerSession(userId, session);
-        logger.info("WebSocket连接已建立，用户ID: {}，会话ID: {}，URI路径: {}",
-                userId, session.getId(), session.getUri().getPath());
+        logger.info("WebSocket连接已建立，用户ID: {}，会话ID: {}", userId, session.getId());
 
         // 发送会话ID到前端
         try {
@@ -78,7 +69,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-        String userId = extractUserId(extractToken(session));
+        String userId = getAuthenticatedUserId(session);
         try {
             String payload = message.getPayload();
 
@@ -139,7 +130,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String userId = "unknown";
         try {
-            userId = extractUserId(extractToken(session));
+            userId = getAuthenticatedUserId(session);
             chatSessionRegistry.unregisterSession(userId, session);
         } catch (Exception e) {
             logger.debug("关闭连接时无法解析用户信息，会话ID: {}", session.getId());
@@ -155,27 +146,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     }
 
-    private String extractUserId(String jwtToken) {
-        String userId = jwtUtils.extractUserIdFromToken(jwtToken);
+    private String getAuthenticatedUserId(WebSocketSession session) {
+        Object authenticatedUserId = session.getAttributes()
+                .get(WebSocketTicketHandshakeInterceptor.USER_ID_ATTRIBUTE);
+        String userId = authenticatedUserId instanceof String value ? value : null;
         if (userId == null || userId.isBlank()) {
-            throw new IllegalArgumentException("无法从JWT令牌中提取用户ID");
+            throw new IllegalArgumentException("WebSocket会话缺少已认证用户ID");
         }
 
-        logger.debug("从JWT令牌中提取的用户ID: {}", userId);
         return userId;
     }
 
     private String normalizeLocale(String locale) {
         return ENGLISH_LOCALE.equals(locale) ? ENGLISH_LOCALE : DEFAULT_LOCALE;
-    }
-
-    private String extractToken(WebSocketSession session) {
-        if (session.getUri() == null || session.getUri().getPath() == null) {
-            throw new IllegalArgumentException("WebSocket URI is missing");
-        }
-        String path = session.getUri().getPath();
-        String[] segments = path.split("/");
-        return segments[segments.length - 1];
     }
 
     private void sendErrorMessage(WebSocketSession session, String errorMessage) {

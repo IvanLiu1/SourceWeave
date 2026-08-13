@@ -9,12 +9,13 @@ node scripts/chat-reconnect-smoke-test.mjs
 Default behavior:
 
 - logs in with `admin / ragproject2026!`
-- opens a first WebSocket connection
+- exchanges the access JWT for a short-lived, single-use WebSocket ticket
+- opens a first WebSocket connection with the ticket (the JWT is never placed in the URL)
 - sends a long prompt that should stream for a while
 - closes the first socket after a few chunks to simulate user disconnect
 - checks `/api/v1/chat/active-generation`
 - checks `/api/v1/chat/generation/{generationId}`
-- opens a second WebSocket connection with the same user
+- requests a fresh ticket and opens a second WebSocket connection with the same user
 - verifies that streaming continues on the new connection
 - verifies the final generation snapshot becomes `COMPLETED`
 

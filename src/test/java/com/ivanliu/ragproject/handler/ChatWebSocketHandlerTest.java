@@ -1,14 +1,14 @@
 package com.ivanliu.ragproject.handler;
 
+import com.ivanliu.ragproject.config.WebSocketTicketHandshakeInterceptor;
 import com.ivanliu.ragproject.service.ChatHandler;
 import com.ivanliu.ragproject.service.ChatSessionRegistry;
-import com.ivanliu.ragproject.utils.JwtUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
-import java.net.URI;
+import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -24,12 +24,11 @@ class ChatWebSocketHandlerTest {
     @BeforeEach
     void setUp() {
         chatHandler = mock(ChatHandler.class);
-        JwtUtils jwtUtils = mock(JwtUtils.class);
         session = mock(WebSocketSession.class);
-        when(session.getUri()).thenReturn(URI.create("ws://localhost/chat/test-token"));
         when(session.getId()).thenReturn("session-1");
-        when(jwtUtils.extractUserIdFromToken("test-token")).thenReturn("42");
-        handler = new ChatWebSocketHandler(chatHandler, jwtUtils, mock(ChatSessionRegistry.class));
+        when(session.getAttributes()).thenReturn(Map.of(
+                WebSocketTicketHandshakeInterceptor.USER_ID_ATTRIBUTE, "42"));
+        handler = new ChatWebSocketHandler(chatHandler, mock(ChatSessionRegistry.class));
     }
 
     @Test

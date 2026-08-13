@@ -3,6 +3,7 @@ package com.ivanliu.ragproject.controller;
 import com.ivanliu.ragproject.handler.ChatWebSocketHandler;
 import com.ivanliu.ragproject.service.AgentToolRegistry;
 import com.ivanliu.ragproject.service.ChatGenerationStateService;
+import com.ivanliu.ragproject.service.WebSocketTicketService;
 import com.ivanliu.ragproject.utils.JwtUtils;
 import com.ivanliu.ragproject.utils.LogUtils;
 import org.springframework.http.ResponseEntity;
@@ -25,13 +26,35 @@ public class ChatController {
     private final JwtUtils jwtUtils;
     private final ChatGenerationStateService chatGenerationStateService;
     private final AgentToolRegistry agentToolRegistry;
+    private final WebSocketTicketService webSocketTicketService;
 
     public ChatController(JwtUtils jwtUtils,
                           ChatGenerationStateService chatGenerationStateService,
-                          AgentToolRegistry agentToolRegistry) {
+                          AgentToolRegistry agentToolRegistry,
+                          WebSocketTicketService webSocketTicketService) {
         this.jwtUtils = jwtUtils;
         this.chatGenerationStateService = chatGenerationStateService;
         this.agentToolRegistry = agentToolRegistry;
+        this.webSocketTicketService = webSocketTicketService;
+    }
+
+    @PostMapping("/websocket-ticket")
+    public ResponseEntity<?> issueWebSocketTicket(@RequestHeader("Authorization") String token) {
+        String userId = extractValidatedUserId(token);
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(401).body(responseBody(401, "Invalid token", null));
+        }
+
+        try {
+            WebSocketTicketService.IssuedTicket ticket = webSocketTicketService.issueTicket(userId);
+            return ResponseEntity.ok(responseBody(200, "获取WebSocket连接票据成功", Map.of(
+                    "ticket", ticket.value(),
+                    "expiresInSeconds", ticket.expiresInSeconds()
+            )));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ISSUE_WEBSOCKET_TICKET", userId, "获取WebSocket连接票据失败", e);
+            return ResponseEntity.status(500).body(responseBody(500, "服务器内部错误", null));
+        }
     }
     
     /**

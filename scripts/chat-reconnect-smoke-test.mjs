@@ -105,6 +105,18 @@ async function getJson(path, token, config) {
   return { status: response.status, json };
 }
 
+async function issueWebSocketTicket(token, config) {
+  const response = await fetch(`${config.apiBase}/chat/websocket-ticket`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const json = await readJson(response);
+  if (!response.ok || !json?.data?.ticket) {
+    throw new Error(`WebSocket ticket request failed: status=${response.status} body=${JSON.stringify(json)}`);
+  }
+  return json.data.ticket;
+}
+
 function logStep(label, payload) {
   const suffix = payload === undefined ? '' : ` ${JSON.stringify(payload)}`;
   console.log(`[chat-reconnect] ${label}${suffix}`);
@@ -125,7 +137,8 @@ async function runPrimarySocket(token, config) {
   let closeScheduled = false;
   let socketError = null;
 
-  const socket = new WebSocket(`${config.wsBase}/${token}`);
+  const ticket = await issueWebSocketTicket(token, config);
+  const socket = new WebSocket(`${config.wsBase}/${ticket}`);
   const opened = new Promise((resolve, reject) => {
     socket.addEventListener('open', resolve, { once: true });
     socket.addEventListener('error', reject, { once: true });
@@ -197,7 +210,8 @@ async function runReconnectSocket(token, generationId, config) {
   let completion = null;
   let socketError = null;
 
-  const socket = new WebSocket(`${config.wsBase}/${token}`);
+  const ticket = await issueWebSocketTicket(token, config);
+  const socket = new WebSocket(`${config.wsBase}/${ticket}`);
 
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {

@@ -164,6 +164,8 @@ elasticsearch:
 security:
   # WebSocket 与浏览器跨域白名单，支持 Origin pattern，多个来源用逗号分隔
   allowed-origins: ${SECURITY_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+  # 浏览器先通过带 Authorization 的 REST 请求换取一次性 WebSocket 票据
+  websocket-ticket-ttl-seconds: ${SECURITY_WEBSOCKET_TICKET_TTL_SECONDS:30}
 
 logging:
   level:

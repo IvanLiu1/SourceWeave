@@ -2,6 +2,7 @@ package com.ivanliu.ragproject.controller;
 
 import com.ivanliu.ragproject.service.AgentToolRegistry;
 import com.ivanliu.ragproject.service.ChatGenerationStateService;
+import com.ivanliu.ragproject.service.WebSocketTicketService;
 import com.ivanliu.ragproject.utils.JwtUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,9 @@ class ChatControllerWebTest {
     @Mock
     private AgentToolRegistry agentToolRegistry;
 
+    @Mock
+    private WebSocketTicketService webSocketTicketService;
+
     @Captor
     private ArgumentCaptor<Map<String, Object>> toolArgumentsCaptor;
 
@@ -57,7 +61,7 @@ class ChatControllerWebTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         ChatController chatController =
-                new ChatController(jwtUtils, chatGenerationStateService, agentToolRegistry);
+                new ChatController(jwtUtils, chatGenerationStateService, agentToolRegistry, webSocketTicketService);
         mockMvc = MockMvcBuilders.standaloneSetup(chatController)
                 .defaultResponseCharacterEncoding(StandardCharsets.UTF_8)
                 .build();
@@ -66,6 +70,33 @@ class ChatControllerWebTest {
     private void stubValidToken() {
         when(jwtUtils.validateToken("valid-token")).thenReturn(true);
         when(jwtUtils.extractUserIdFromToken("valid-token")).thenReturn("user-1");
+    }
+
+    @Test
+    void issueWebSocketTicket_returnsOpaqueShortLivedTicket() throws Exception {
+        stubValidToken();
+        when(webSocketTicketService.issueTicket("user-1"))
+                .thenReturn(new WebSocketTicketService.IssuedTicket("0123456789abcdef0123456789abcdef", 30));
+
+        mockMvc.perform(post("/api/v1/chat/websocket-ticket")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.ticket").value("0123456789abcdef0123456789abcdef"))
+                .andExpect(jsonPath("$.data.expiresInSeconds").value(30));
+
+        verify(webSocketTicketService).issueTicket("user-1");
+    }
+
+    @Test
+    void issueWebSocketTicket_whenTokenInvalid_returns401() throws Exception {
+        when(jwtUtils.validateToken("bad-token")).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/chat/websocket-ticket")
+                        .header("Authorization", "Bearer bad-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     // ---------------------------------------------------------------

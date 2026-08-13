@@ -16,14 +16,17 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
 
   const store = useAuthStore();
 
+  const socketUrl = ref<string>();
   const sessionId = ref<string>('');
   const allowReconnect = ref(true);
   const authFailureNotified = ref(false);
   const handshakeConfirmed = ref(false);
-  const intentionalDisconnect = ref(false);
   const rateLimitUntil = ref<number | null>(null);
   const rateLimitRemainingSeconds = ref(0);
   let rateLimitTimer: ReturnType<typeof setInterval> | null = null;
+  let reconnectTimer: number | null = null;
+  let ticketRequestId = 0;
+  const expectedSocketClosures = new WeakSet<WebSocket>();
 
   function mapGenerationStatus(status?: Api.Chat.GenerationStatus): Api.Chat.Message['status'] {
     if (status === 'COMPLETED' || status === 'CANCELLED') {
@@ -226,20 +229,13 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
 
   // ---- WebSocket ----
 
-  const socketUrl = computed(() => {
-    const token = store.token?.trim();
-    if (!token) {
-      return undefined;
-    }
-    return `/proxy-ws/chat/${encodeURIComponent(token)}`;
-  });
-
   const {
     status: wsStatus,
     data: wsData,
     send: rawWsSend,
     open: rawWsOpen,
-    close: rawWsClose
+    close: rawWsClose,
+    ws: activeSocket
   } = useWebSocket(socketUrl, {
     immediate: false,
     autoConnect: false,
@@ -249,24 +245,13 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
       interval: 20_000,
       pongTimeout: 10_000
     },
-    autoReconnect: {
-      retries: () => allowReconnect.value,
-      delay: 1500,
-      onFailed: () => {
-        if (allowReconnect.value && socketUrl.value) {
-          window.$message?.warning($t('page.chat.input.reconnectFailed'));
-        }
-      }
-    },
+    autoReconnect: false,
     onConnected: () => {
       allowReconnect.value = true;
       authFailureNotified.value = false;
-      intentionalDisconnect.value = false;
     },
-    onDisconnected: (_, event) => {
-      if (intentionalDisconnect.value) {
-        intentionalDisconnect.value = false;
-        allowReconnect.value = Boolean(socketUrl.value);
+    onDisconnected: (socket, event) => {
+      if (expectedSocketClosures.delete(socket)) {
         return;
       }
       const closedBeforeHandshake = !handshakeConfirmed.value;
@@ -275,9 +260,56 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
       if (isAuthOrProtocolFailure && !authFailureNotified.value) {
         authFailureNotified.value = true;
         window.$message?.error($t('page.chat.input.authFailed'));
+        return;
       }
+      scheduleReconnect();
     }
   });
+
+  function clearReconnectTimer() {
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  }
+
+  function scheduleReconnect() {
+    if (!allowReconnect.value || !store.token?.trim() || reconnectTimer !== null) {
+      return;
+    }
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      openWithFreshTicket().catch(() => {});
+    }, 1500);
+  }
+
+  async function openWithFreshTicket() {
+    const authToken = store.token?.trim();
+    if (!authToken || !allowReconnect.value) {
+      return;
+    }
+
+    ticketRequestId += 1;
+    const currentRequestId = ticketRequestId;
+    const { error, data } = await request<Api.Chat.WebSocketTicket>({
+      url: 'chat/websocket-ticket',
+      method: 'POST'
+    });
+    if (currentRequestId !== ticketRequestId || authToken !== store.token?.trim()) {
+      return;
+    }
+    if (error || !data?.ticket) {
+      scheduleReconnect();
+      return;
+    }
+
+    socketUrl.value = `/proxy-ws/chat/${encodeURIComponent(data.ticket)}`;
+    resetConnectionState();
+    if (activeSocket.value) {
+      expectedSocketClosures.add(activeSocket.value);
+    }
+    rawWsOpen();
+  }
 
   function syncRateLimitCountdown() {
     if (!rateLimitUntil.value) {
@@ -323,18 +355,23 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
   }
 
   function wsOpen() {
-    if (!socketUrl.value) {
+    if (!store.token?.trim()) {
       return;
     }
+    clearReconnectTimer();
     resetConnectionState();
     allowReconnect.value = true;
-    intentionalDisconnect.value = wsStatus.value === 'OPEN' || wsStatus.value === 'CONNECTING';
-    rawWsOpen();
+    openWithFreshTicket().catch(() => scheduleReconnect());
   }
 
   function wsClose(code?: number, reason?: string) {
-    intentionalDisconnect.value = true;
+    ticketRequestId += 1;
+    clearReconnectTimer();
     allowReconnect.value = false;
+    socketUrl.value = undefined;
+    if (activeSocket.value) {
+      expectedSocketClosures.add(activeSocket.value);
+    }
     rawWsClose(code, reason);
   }
 
@@ -349,10 +386,10 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
   }
 
   watch(
-    socketUrl,
-    url => {
+    () => store.token?.trim() || '',
+    token => {
       resetConnectionState();
-      if (!url) {
+      if (!token) {
         wsClose();
         clearRateLimitCountdown();
         return;
