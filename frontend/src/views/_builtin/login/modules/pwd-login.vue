@@ -27,7 +27,7 @@ const rememberedLogin = localStg.get('rememberedLogin');
 
 const model: FormModel = reactive({
   userName: rememberedLogin?.userName || '',
-  password: rememberedLogin?.password || '',
+  password: '',
   rememberMe: Boolean(rememberedLogin)
 });
 
@@ -51,15 +51,11 @@ async function handleSubmit() {
   }
 
   if (model.rememberMe) {
-    localStg.set('rememberedLogin', {
-      userName: model.userName,
-      password: model.password
-    });
+    localStg.set('rememberedLogin', { userName: model.userName });
   } else {
     localStg.remove('rememberedLogin');
   }
 }
-
 </script>
 
 <template>

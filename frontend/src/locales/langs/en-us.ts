@@ -195,7 +195,7 @@ const local: App.I18n.Schema = {
       },
       pwdLogin: {
         title: 'Password Login',
-        rememberMe: 'Remember username and password',
+        rememberMe: 'Remember username',
         forgetPassword: 'Forget password?',
         register: 'Register',
         otherAccountLogin: 'Other Account Login',
