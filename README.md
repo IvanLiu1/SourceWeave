@@ -12,7 +12,7 @@ SourceWeave 是一个基于 RAG（检索增强生成）的企业知识管理系�
 - 可配置的 LLM、Embedding Provider 与运行时限额
 - 可复现的 RAG 回归评测
 
-WebSocket 连接使用短时一次性票据，访问 JWT 不会进入 WebSocket URL。
+WebSocket 连接使用 Redis 中的短时一次性票据（默认 30 秒，握手时原子消费），每次重连都会重新换票，访问 JWT 不会进入 WebSocket URL。应用、开发代理和 Nginx 日志中的 `/chat/{ticket}` 统一记录为 `/chat/{redacted}`。
 
 ## 技术栈
 

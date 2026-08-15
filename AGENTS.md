@@ -99,6 +99,21 @@ API keys, or complete token-bearing URLs. Redact sensitive values in logs and co
 SourceWeave authorization depends on user identity, organization tags, role, and sometimes explicit
 query parameters. Verify all relevant filters when changing queries, documents, or admin views.
 
+### WebSocket authentication and logs
+
+- Browser WebSocket connections must exchange the access JWT through the authenticated
+  `POST /api/v1/chat/websocket-ticket` endpoint. Never place an access JWT in a URL.
+- WebSocket tickets are opaque, short-lived (30 seconds by default), stored in Redis, and consumed
+  atomically with `GETDEL`. Every reconnect must request a fresh ticket; never weaken the single-use
+  behavior or fall back to accepting JWTs on `/chat/**`.
+- Treat `/chat/{ticket}` and `/proxy-ws/chat/{ticket}` as credential-bearing paths. Application,
+  development-proxy, reverse-proxy, access, error, and performance logs must render the credential
+  segment as `{redacted}`. Never log `WebSocketSession.getUri()` directly.
+- Ticket responses must remain non-cacheable (`Cache-Control: no-store`). Do not enable framework
+  request DEBUG logging unless the resulting WebSocket paths have been verified as redacted.
+- If an access JWT is found in logs, treat it as a credential incident: revoke affected tokens or
+  rotate the signing key, remove copies from log stores and backups, and audit the exposure window.
+
 ### Retrieval and citations
 
 - Treat rerank scores as ordering and observability signals, not answer confidence.
