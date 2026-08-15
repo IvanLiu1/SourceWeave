@@ -3,6 +3,12 @@ import { bgRed, bgYellow, green, lightBlue } from 'kolorist';
 import { consola } from 'consola';
 import { createServiceConfig } from '../../src/utils/service';
 
+const websocketCredentialPathPattern = /^((?:(?:https?|wss?):\/\/[^/\s]+)?\/(?:proxy-ws\/)?chat\/)[^/?#\s]+/;
+
+export function sanitizeProxyLogUrl(url: string) {
+  return url.replace(websocketCredentialPathPattern, '$1{redacted}');
+}
+
 /**
  * Set http proxy
  *
@@ -37,15 +43,15 @@ function createProxyItem(item: App.Service.ServiceConfigItem, enableLog: boolean
       _proxy.on('proxyReq', (_proxyReq, req, _res) => {
         if (!enableLog) return;
 
-        const requestUrl = `${lightBlue('[proxy url]')}: ${bgYellow(` ${req.method} `)} ${green(`${item.proxyPattern}${req.url}`)}`;
+        const requestUrl = `${lightBlue('[proxy url]')}: ${bgYellow(` ${req.method} `)} ${green(sanitizeProxyLogUrl(`${item.proxyPattern}${req.url}`))}`;
 
-        const proxyUrl = `${lightBlue('[real request url]')}: ${green(`${options.target}${req.url}`)}`;
+        const proxyUrl = `${lightBlue('[real request url]')}: ${green(sanitizeProxyLogUrl(`${options.target}${req.url}`))}`;
 
         consola.log(`${requestUrl}\n${proxyUrl}`);
       });
       _proxy.on('error', (_err, req, _res) => {
         if (!enableLog) return;
-        consola.log(bgRed(`Error: ${req.method} `), green(`${options.target}${req.url}`));
+        consola.log(bgRed(`Error: ${req.method} `), green(sanitizeProxyLogUrl(`${options.target}${req.url}`)));
       });
     },
     ws: /^wss?:\/\//.test(item.baseURL),

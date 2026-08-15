@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -81,6 +82,7 @@ class ChatControllerWebTest {
         mockMvc.perform(post("/api/v1/chat/websocket-ticket")
                         .header("Authorization", "Bearer valid-token"))
                 .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.ticket").value("0123456789abcdef0123456789abcdef"))
                 .andExpect(jsonPath("$.data.expiresInSeconds").value(30));

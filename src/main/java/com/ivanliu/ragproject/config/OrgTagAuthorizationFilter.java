@@ -3,6 +3,7 @@ package com.ivanliu.ragproject.config;
 import com.ivanliu.ragproject.model.FileUpload;
 import com.ivanliu.ragproject.repository.FileUploadRepository;
 import com.ivanliu.ragproject.utils.JwtUtils;
+import com.ivanliu.ragproject.utils.LogUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -88,7 +89,7 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
                     operation = "重建文档索引";
                 }
                 
-                logger.info("处理{}请求: {}", operation, path);
+                logger.info("处理{}请求: {}", operation, LogUtils.sanitizeRequestPath(path));
                 
                 // 将用户ID和角色设置为请求属性，供控制器方法使用
                 String token = extractToken(request);
@@ -113,7 +114,8 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
             }
             
             boolean isChunkUpload = path.matches(".*/upload/chunk.*");
-            logger.debug("请求路径: {}, 是否为分片上传: {}", path, isChunkUpload);
+            logger.debug("请求路径: {}, 是否为分片上传: {}",
+                    LogUtils.sanitizeRequestPath(path), isChunkUpload);
             
             // 获取路径中的资源ID
             String resourceId = extractResourceIdFromPath(request);
@@ -215,7 +217,7 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
      */
     private String extractResourceIdFromPath(HttpServletRequest request) {
         String path = request.getRequestURI();
-        logger.debug("提取资源ID，请求路径: {}", path);
+        logger.debug("提取资源ID，请求路径: {}", LogUtils.sanitizeRequestPath(path));
         
         // 提取不同类型资源的ID
         // 1. 文件资源: /api/v1/files/{fileMd5}

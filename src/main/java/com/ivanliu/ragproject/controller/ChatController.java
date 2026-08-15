@@ -6,6 +6,7 @@ import com.ivanliu.ragproject.service.ChatGenerationStateService;
 import com.ivanliu.ragproject.service.WebSocketTicketService;
 import com.ivanliu.ragproject.utils.JwtUtils;
 import com.ivanliu.ragproject.utils.LogUtils;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -47,10 +48,12 @@ public class ChatController {
 
         try {
             WebSocketTicketService.IssuedTicket ticket = webSocketTicketService.issueTicket(userId);
-            return ResponseEntity.ok(responseBody(200, "获取WebSocket连接票据成功", Map.of(
-                    "ticket", ticket.value(),
-                    "expiresInSeconds", ticket.expiresInSeconds()
-            )));
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .body(responseBody(200, "获取WebSocket连接票据成功", Map.of(
+                            "ticket", ticket.value(),
+                            "expiresInSeconds", ticket.expiresInSeconds()
+                    )));
         } catch (Exception e) {
             LogUtils.logBusinessError("ISSUE_WEBSOCKET_TICKET", userId, "获取WebSocket连接票据失败", e);
             return ResponseEntity.status(500).body(responseBody(500, "服务器内部错误", null));

@@ -43,8 +43,9 @@ public class LoggingInterceptor implements HandlerInterceptor {
         // 记录请求开始日志（仅对API请求）
         String path = request.getRequestURI();
         if (isApiRequest(path)) {
+            String safePath = LogUtils.sanitizeRequestPath(path);
             LogUtils.logBusiness("REQUEST_START", userId, 
-                "开始处理请求 [%s] %s", request.getMethod(), path);
+                "开始处理请求 [%s] %s", request.getMethod(), safePath);
         }
         
         return true;
@@ -63,18 +64,19 @@ public class LoggingInterceptor implements HandlerInterceptor {
                 
                 // 记录API调用日志（仅对API请求）
                 if (isApiRequest(path)) {
-                    LogUtils.logApiCall(request.getMethod(), path, userId, response.getStatus(), duration);
+                    String safePath = LogUtils.sanitizeRequestPath(path);
+                    LogUtils.logApiCall(request.getMethod(), safePath, userId, response.getStatus(), duration);
                     
                     // 记录异常信息
                     if (ex != null) {
                         LogUtils.logBusinessError("REQUEST_ERROR", userId, 
-                            "请求处理异常 [%s] %s", ex, request.getMethod(), path);
+                            "请求处理异常 [%s] %s", ex, request.getMethod(), safePath);
                     }
                     
                     // 记录慢请求
                     if (duration > 3000) { // 超过3秒的请求
                         LogUtils.logPerformance("SLOW_REQUEST", duration, 
-                            String.format("[%s] %s [用户:%s]", request.getMethod(), path, userId));
+                            String.format("[%s] %s [用户:%s]", request.getMethod(), safePath, userId));
                     }
                 }
             }
@@ -116,4 +118,4 @@ public class LoggingInterceptor implements HandlerInterceptor {
     private boolean isApiRequest(String path) {
         return path.startsWith("/api/") || path.startsWith("/chat/");
     }
-} 
+}

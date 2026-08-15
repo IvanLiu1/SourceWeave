@@ -4,11 +4,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
+import java.util.regex.Pattern;
+
 /**
  * 日志工具类
  * 提供统一的日志记录方法和格式
  */
 public class LogUtils {
+
+    private static final Pattern WEBSOCKET_CREDENTIAL_PATH = Pattern.compile(
+            "^(/(?:proxy-ws/)?chat/)[^/?#]+"
+    );
+    private static final String REDACTED_WEBSOCKET_CREDENTIAL = "$1{redacted}";
     
     // 业务日志记录器
     private static final Logger BUSINESS_LOGGER = LoggerFactory.getLogger("com.ivanliu.ragproject.business");
@@ -84,6 +91,19 @@ public class LogUtils {
         } finally {
             MDC.clear();
         }
+    }
+
+    /**
+     * Removes the credential segment from browser WebSocket paths before they reach any log sink.
+     * This covers both the frontend proxy path and the backend handler path while leaving REST
+     * endpoints such as /api/v1/chat/websocket-ticket unchanged.
+     */
+    public static String sanitizeRequestPath(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+        return WEBSOCKET_CREDENTIAL_PATH.matcher(path)
+                .replaceFirst(REDACTED_WEBSOCKET_CREDENTIAL);
     }
     
     /**
@@ -162,4 +182,4 @@ public class LogUtils {
     public static PerformanceMonitor startPerformanceMonitor(String operation) {
         return new PerformanceMonitor(operation);
     }
-} 
+}
