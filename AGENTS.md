@@ -171,6 +171,11 @@ configuration cleanup:
 4. push directly to `origin/main`
 5. do not create a branch or pull request
 
+Treat this as automatic delivery once the relevant checks pass: do not wait for a separate request to
+commit or push. Before pushing, confirm that `main` is synchronized with `origin/main` and that the
+commit contains only the intended files. If validation fails, authentication is unavailable, or the
+remote has diverged, stop and report the blocker instead of forcing the push.
+
 For business logic, security-sensitive behavior, schema or data migrations, dependency upgrades, or
 larger cross-layer changes, use a `codex/` branch and a pull request unless the user explicitly requests
 direct delivery.
