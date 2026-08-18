@@ -17,9 +17,9 @@ jobs:
     name: backend-verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -39,13 +39,13 @@ jobs:
       # 跳过 prepare 里的 simple-git-hooks:CI runner 不需要安装 git 钩子
       SKIP_SIMPLE_GIT_HOOKS: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: pnpm
@@ -66,9 +66,9 @@ jobs:
     name: rag-evaluation-tools-offline-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -80,7 +80,7 @@ jobs:
     name: deployment-config-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 示例文件故意留空生产密钥；这里只注入非生产占位值来验证 Compose 插值和结构。
       - name: Validate Docker Compose configuration
