@@ -87,6 +87,20 @@ const toolStatusKeys: Record<Api.Chat.AgentToolEvent['status'], App.I18n.I18nKey
 
 const toolEvents = computed(() => props.msg.toolEvents || []);
 
+type ReferencePreviewPayload = Omit<Partial<Api.Chat.ReferenceEvidence>, 'fileName' | 'fileMd5'> & {
+  fileName: string;
+  fileMd5?: string | null;
+  sessionId?: string;
+  referenceNumber: number;
+};
+
+interface SourceFileClickInfo {
+  fileName: string;
+  referenceNumber: number;
+  fileMd5?: string;
+  anchorText?: string;
+}
+
 function getToolLabel(tool: string) {
   const key = toolNameKeys[tool];
   return key ? $t(key) : tool;
@@ -96,34 +110,26 @@ function getToolStatusLabel(status: Api.Chat.AgentToolEvent['status']) {
   return $t(toolStatusKeys[status]);
 }
 
+function shouldTrimTrailingUrlCharacter(url: string, lastChar: string) {
+  if (/[，。！？；：、,.!?;:]/.test(lastChar)) return true;
+  if (lastChar !== ')' && lastChar !== '）') return false;
+
+  const openingChar = lastChar === ')' ? '(' : '（';
+  const openingCount = url.split(openingChar).length - 1;
+  const closingCount = url.split(lastChar).length - 1;
+  return closingCount > openingCount;
+}
+
 function splitTrailingUrlPunctuation(rawUrl: string) {
   let url = rawUrl;
   let trailing = '';
 
   while (url) {
     const lastChar = url.at(-1);
-    if (!lastChar) break;
+    if (!lastChar || !shouldTrimTrailingUrlCharacter(url, lastChar)) break;
 
-    if (/[，。！？；：、,.!?;:]/.test(lastChar)) {
-      trailing = `${lastChar}${trailing}`;
-      url = url.slice(0, -1);
-      continue;
-    }
-
-    if (lastChar === ')' || lastChar === '）') {
-      const openingChar = lastChar === ')' ? '(' : '（';
-      const closingChar = lastChar;
-      const openingCount = (url.match(new RegExp(`\\${openingChar}`, 'g')) || []).length;
-      const closingCount = (url.match(new RegExp(`\\${closingChar}`, 'g')) || []).length;
-
-      if (closingCount > openingCount) {
-        trailing = `${lastChar}${trailing}`;
-        url = url.slice(0, -1);
-        continue;
-      }
-    }
-
-    break;
+    trailing = `${lastChar}${trailing}`;
+    url = url.slice(0, -1);
   }
 
   return { url, trailing };
@@ -237,21 +243,7 @@ function extractContextAnchorText(target: HTMLElement) {
     .trim();
 }
 
-function openReferencePreviewPage(payload: {
-  retrievalMode?: Api.Chat.ReferenceEvidence['retrievalMode'];
-  retrievalLabel?: string | null;
-  retrievalQuery?: string | null;
-  evidenceSnippet?: string | null;
-  matchedChunkText?: string | null;
-  score?: number | null;
-  chunkId?: number | null;
-  fileName: string;
-  fileMd5?: string | null;
-  pageNumber?: number | null;
-  anchorText?: string | null;
-  sessionId?: string;
-  referenceNumber: number;
-}) {
+function openReferencePreviewPage(payload: ReferencePreviewPayload) {
   const previewKey = `reference-preview:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
   localStorage.setItem(previewKey, JSON.stringify(payload));
 
@@ -264,6 +256,70 @@ function openReferencePreviewPage(payload: {
   });
 
   window.open(routeLocation.href, '_blank', 'noopener,noreferrer');
+}
+
+function needsReferenceDetail(
+  sessionId: string | undefined,
+  persistedDetail: Api.Chat.ReferenceEvidence | undefined
+) {
+  return Boolean(
+    sessionId &&
+      (!persistedDetail?.retrievalQuery || !persistedDetail.matchedChunkText || !persistedDetail.evidenceSnippet)
+  );
+}
+
+async function fetchReferenceDetail(sessionId: string, referenceNumber: number) {
+  try {
+    const { error, data } = await request<Api.Document.ReferenceDetailResponse>({
+      url: 'documents/reference-detail',
+      params: {
+        sessionId,
+        referenceNumber: referenceNumber.toString()
+      }
+    });
+
+    return !error && data?.fileMd5 ? data : null;
+  } catch (error) {
+    console.warn('通过API查询引用详情失败:', error);
+    return null;
+  }
+}
+
+async function resolveReferenceDetail(
+  sessionId: string | undefined,
+  referenceNumber: number,
+  persistedDetail: Api.Chat.ReferenceEvidence | undefined
+) {
+  if (!sessionId || !needsReferenceDetail(sessionId, persistedDetail)) return persistedDetail;
+  return (await fetchReferenceDetail(sessionId, referenceNumber)) || persistedDetail;
+}
+
+function buildReferencePreviewPayload({
+  fileInfo,
+  detail,
+  sessionId,
+  fallbackRetrievalQuery
+}: {
+  fileInfo: SourceFileClickInfo;
+  detail: Api.Chat.ReferenceEvidence | null | undefined;
+  sessionId?: string;
+  fallbackRetrievalQuery: string;
+}): ReferencePreviewPayload {
+  return {
+    fileName: detail?.fileName || fileInfo.fileName,
+    fileMd5: detail?.fileMd5 || fileInfo.fileMd5 || null,
+    pageNumber: detail?.pageNumber,
+    anchorText: detail?.anchorText || fileInfo.anchorText || '',
+    retrievalMode: detail?.retrievalMode,
+    retrievalLabel: detail?.retrievalLabel,
+    retrievalQuery: detail?.retrievalQuery || fallbackRetrievalQuery,
+    evidenceSnippet: detail?.evidenceSnippet,
+    matchedChunkText: detail?.matchedChunkText,
+    score: detail?.score,
+    chunkId: detail?.chunkId,
+    sessionId,
+    referenceNumber: fileInfo.referenceNumber
+  };
 }
 
 // 处理内容点击事件（事件委托）
@@ -289,74 +345,23 @@ function handleContentClick(event: MouseEvent) {
 }
 
 // 处理来源文件点击事件
-async function handleSourceFileClick(fileInfo: {
-  fileName: string;
-  referenceNumber: number;
-  fileMd5?: string;
-  anchorText?: string;
-}) {
-  const { fileName, referenceNumber, fileMd5: extractedMd5, anchorText: clickedAnchorText } = fileInfo;
+async function handleSourceFileClick(fileInfo: SourceFileClickInfo) {
+  const { fileName, referenceNumber } = fileInfo;
   const persistedDetail = props.msg.referenceMappings?.[String(referenceNumber)] || props.msg.referenceMappings?.[referenceNumber];
   const referenceSessionId = props.msg.generationId || props.msg.conversationId || props.sessionId;
-  console.log('点击了来源文件:', fileName, '引用编号:', referenceNumber, '提取的MD5:', extractedMd5, '会话ID:', referenceSessionId);
+  console.log('点击了来源文件:', fileName, '引用编号:', referenceNumber, '提取的MD5:', fileInfo.fileMd5, '会话ID:', referenceSessionId);
 
   try {
-    let detail: Api.Document.ReferenceDetailResponse | null = null;
     const fallbackRetrievalQuery = props.retrievalQueryFallback || '';
-
-    if (referenceSessionId && (!persistedDetail?.retrievalQuery || !persistedDetail?.matchedChunkText || !persistedDetail?.evidenceSnippet)) {
-      try {
-        const { error: detailError, data: detailData } = await request<Api.Document.ReferenceDetailResponse>({
-          url: 'documents/reference-detail',
-          params: {
-            sessionId: referenceSessionId,
-            referenceNumber: referenceNumber.toString()
-          }
-        });
-
-        if (!detailError && detailData?.fileMd5) {
-          detail = detailData;
-        }
-      } catch (detailErr) {
-        console.warn('通过API查询引用详情失败:', detailErr);
-      }
-    }
-
-    if (persistedDetail?.fileMd5 && !detail) {
-      openReferencePreviewPage({
-        fileName: persistedDetail.fileName || fileName,
-        fileMd5: persistedDetail.fileMd5,
-        pageNumber: persistedDetail.pageNumber,
-        anchorText: persistedDetail.anchorText || clickedAnchorText || '',
-        retrievalMode: persistedDetail.retrievalMode,
-        retrievalLabel: persistedDetail.retrievalLabel,
-        retrievalQuery: persistedDetail.retrievalQuery || fallbackRetrievalQuery,
-        evidenceSnippet: persistedDetail.evidenceSnippet,
-        matchedChunkText: persistedDetail.matchedChunkText,
-        score: persistedDetail.score,
-        chunkId: persistedDetail.chunkId,
+    const detail = await resolveReferenceDetail(referenceSessionId, referenceNumber, persistedDetail);
+    openReferencePreviewPage(
+      buildReferencePreviewPayload({
+        fileInfo,
+        detail,
         sessionId: referenceSessionId,
-        referenceNumber
-      });
-      return;
-    }
-
-    const targetMd5 = detail?.fileMd5 || extractedMd5 || null;
-    openReferencePreviewPage({
-      fileName: detail?.fileName || fileName,
-      fileMd5: targetMd5,
-      pageNumber: detail?.pageNumber,
-      anchorText: detail?.anchorText || clickedAnchorText || '',
-      retrievalMode: detail?.retrievalMode,
-      retrievalLabel: detail?.retrievalLabel,
-      retrievalQuery: detail?.retrievalQuery || fallbackRetrievalQuery,
-      evidenceSnippet: detail?.evidenceSnippet,
-      matchedChunkText: detail?.matchedChunkText,
-      score: detail?.score,
-      chunkId: detail?.chunkId,
-      sessionId: referenceSessionId,
-      referenceNumber
-    });
+        fallbackRetrievalQuery
+      })
+    );
   } catch (err) {
     console.error('文件下载失败:', err);
     window.$message?.error($t('page.chat.message.downloadError', { fileName }));

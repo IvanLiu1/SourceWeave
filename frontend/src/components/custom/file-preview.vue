@@ -180,6 +180,18 @@ interface Emits {
   (e: 'close'): void;
 }
 
+interface PreviewResponse {
+  fileName: string;
+  fileSize: number;
+  fileMd5?: string;
+  content?: string;
+  previewUrl?: string;
+  sourceUrl?: string;
+  singlePageMode?: boolean;
+  sourcePageNumber?: number;
+  previewType?: 'pdf' | 'image' | 'text' | 'download';
+}
+
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
@@ -332,16 +344,7 @@ watch(() => props.visible, async (visible) => {
   }
 });
 
-// 加载预览内容
-async function loadPreviewContent() {
-  if (!props.fileName) return;
-
-  console.log('[文件预览] 开始加载预览内容:', {
-    fileName: props.fileName,
-    fileMd5: props.fileMd5,
-    visible: props.visible
-  });
-
+function resetPreviewState() {
   loading.value = true;
   error.value = '';
   content.value = '';
@@ -350,104 +353,67 @@ async function loadPreviewContent() {
   singlePageMode.value = false;
   sourcePageNumber.value = undefined;
   previewType.value = 'text';
+}
+
+function applyPreviewData(data: PreviewResponse) {
+  previewType.value = data.previewType || 'download';
+  content.value = data.content || '';
+  previewUrl.value = data.previewUrl || '';
+  sourceUrl.value = data.sourceUrl || data.previewUrl || '';
+  singlePageMode.value = Boolean(data.singlePageMode);
+  sourcePageNumber.value = data.sourcePageNumber || props.pageNumber;
+}
+
+function getErrorMessage(cause: unknown, fallback: string) {
+  return cause instanceof Error && cause.message ? cause.message : fallback;
+}
+
+// 加载预览内容
+async function loadPreviewContent() {
+  if (!props.fileName) return;
+
+  const previewMode = props.fileMd5 ? 'MD5模式' : '文件名模式';
+  const params = {
+    fileName: props.fileName,
+    pageNumber: props.pageNumber,
+    ...(props.fileMd5 ? { fileMd5: props.fileMd5 } : {})
+  };
+
+  console.log('[文件预览] 开始加载预览内容:', {
+    ...params,
+    visible: props.visible
+  });
+  console.log(`[文件预览] 使用${previewMode}预览，请求参数:`, params);
+
+  resetPreviewState();
 
   try {
-    // 优先使用 MD5 预览（如果存在）
-    if (props.fileMd5) {
-      console.log('[文件预览] 使用MD5模式预览，请求参数:', {
-        fileName: props.fileName,
-        fileMd5: props.fileMd5,
-        pageNumber: props.pageNumber
-      });
+    const { error: requestError, data } = await request<PreviewResponse>({
+      url: '/documents/preview',
+      params
+    });
 
-      const { error: requestError, data } = await request<{
-        fileName: string;
-        fileSize: number;
-        fileMd5?: string;
-        content?: string;
-        previewUrl?: string;
-        sourceUrl?: string;
-        singlePageMode?: boolean;
-        sourcePageNumber?: number;
-        previewType?: 'pdf' | 'image' | 'text' | 'download';
-      }>({
-        url: '/documents/preview',
-        params: {
-          fileName: props.fileName,
-          fileMd5: props.fileMd5,
-          pageNumber: props.pageNumber
-        }
-      });
+    console.log(`[文件预览] ${previewMode}API响应:`, {
+      hasError: Boolean(requestError),
+      error: requestError,
+      hasData: Boolean(data),
+      contentLength: data?.content?.length || 0,
+      contentPreview: data?.content?.substring(0, 100) || ''
+    });
 
-      console.log('[文件预览] MD5模式API响应:', {
-        hasError: !!requestError,
-        error: requestError,
-        hasData: !!data,
-        contentLength: data?.content?.length || 0,
-        contentPreview: data?.content?.substring(0, 100) || ''
+    if (requestError) {
+      error.value = $t('component.filePreview.previewFailed', {
+        message: requestError.message || $t('component.filePreview.unknownError')
       });
-
-      if (requestError) {
-        error.value = $t('component.filePreview.previewFailed', {
-          message: requestError.message || $t('component.filePreview.unknownError')
-        });
-      } else if (data) {
-        previewType.value = data.previewType || 'download';
-        content.value = data.content || '';
-        previewUrl.value = data.previewUrl || '';
-        sourceUrl.value = data.sourceUrl || data.previewUrl || '';
-        singlePageMode.value = Boolean(data.singlePageMode);
-        sourcePageNumber.value = data.sourcePageNumber || props.pageNumber;
-      }
-    } else {
-      // 降级：使用文件名预览（向后兼容）
-      console.log('[文件预览] 使用文件名模式预览（降级）, 请求参数:', {
-        fileName: props.fileName,
-        pageNumber: props.pageNumber
-      });
-
-      const { error: requestError, data } = await request<{
-        fileName: string;
-        fileSize: number;
-        fileMd5?: string;
-        content?: string;
-        previewUrl?: string;
-        sourceUrl?: string;
-        singlePageMode?: boolean;
-        sourcePageNumber?: number;
-        previewType?: 'pdf' | 'image' | 'text' | 'download';
-      }>({
-        url: '/documents/preview',
-        params: {
-          fileName: props.fileName,
-          pageNumber: props.pageNumber
-        }
-      });
-
-      console.log('[文件预览] 文件名模式API响应:', {
-        hasError: !!requestError,
-        error: requestError,
-        hasData: !!data,
-        contentLength: data?.content?.length || 0,
-        contentPreview: data?.content?.substring(0, 100) || ''
-      });
-
-      if (requestError) {
-        error.value = $t('component.filePreview.previewFailed', {
-          message: requestError.message || $t('component.filePreview.unknownError')
-        });
-      } else if (data) {
-        previewType.value = data.previewType || 'download';
-        content.value = data.content || '';
-        previewUrl.value = data.previewUrl || '';
-        sourceUrl.value = data.sourceUrl || data.previewUrl || '';
-        singlePageMode.value = Boolean(data.singlePageMode);
-        sourcePageNumber.value = data.sourcePageNumber || props.pageNumber;
-      }
+      return;
     }
-  } catch (err: any) {
+
+    if (data) {
+      applyPreviewData(data);
+    }
+  } catch (cause: unknown) {
     error.value = $t('component.filePreview.previewFailed', {
-      message: err.message || $t('component.filePreview.networkError')
+      message: getErrorMessage(cause, $t('component.filePreview.networkError'))
     });
   } finally {
     loading.value = false;

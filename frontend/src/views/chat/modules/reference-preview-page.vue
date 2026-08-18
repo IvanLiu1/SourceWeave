@@ -29,6 +29,15 @@ const sessionId = ref('');
 const previewKey = computed(() => String(route.query.previewKey || ''));
 const hasPreviewTarget = computed(() => Boolean(fileName.value || fileMd5.value));
 
+type StoredReferencePreview = Partial<Api.Document.ReferenceDetailResponse> & {
+  fileName?: string;
+  fileMd5?: string;
+  pageNumber?: number | null;
+  anchorText?: string | null;
+  sessionId?: string | null;
+  referenceNumber?: number | null;
+};
+
 function readOptionalNumber(value: unknown) {
   const parsed = Number.parseInt(String(value || ''), 10);
   return Number.isNaN(parsed) ? undefined : parsed;
@@ -51,14 +60,7 @@ function syncFromStorage() {
   if (!raw) return false;
 
   try {
-    const payload = JSON.parse(raw) as Partial<Api.Document.ReferenceDetailResponse> & {
-      fileName?: string;
-      fileMd5?: string;
-      pageNumber?: number | null;
-      anchorText?: string | null;
-      sessionId?: string | null;
-      referenceNumber?: number | null;
-    };
+    const payload = JSON.parse(raw) as StoredReferencePreview;
 
     fileName.value = payload.fileName || fileName.value;
     fileMd5.value = payload.fileMd5 || fileMd5.value;
@@ -79,18 +81,35 @@ function syncFromStorage() {
   }
 }
 
+function hasStoredReferenceDetail(restoredFromStorage: boolean) {
+  return Boolean(restoredFromStorage && (fileMd5.value || matchedChunkText.value || evidenceSnippet.value));
+}
+
+function applyReferenceDetail(data: Api.Document.ReferenceDetailResponse) {
+  fileName.value = data.fileName || fileName.value;
+  fileMd5.value = data.fileMd5 || fileMd5.value;
+  pageNumber.value = data.pageNumber || pageNumber.value;
+  anchorText.value = data.anchorText || anchorText.value;
+  retrievalMode.value = data.retrievalMode ?? null;
+  retrievalLabel.value = data.retrievalLabel || '';
+  retrievalQuery.value = data.retrievalQuery || '';
+  evidenceSnippet.value = data.evidenceSnippet || '';
+  matchedChunkText.value = data.matchedChunkText || '';
+  score.value = data.score ?? null;
+  chunkId.value = data.chunkId ?? null;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error && error.message ? error.message : $t('page.chat.reference.loadFailed');
+}
+
 async function loadReferenceDetail() {
   syncFallbackFromQuery();
   const restoredFromStorage = syncFromStorage();
   loadError.value = '';
 
-  if (restoredFromStorage && (fileMd5.value || matchedChunkText.value || evidenceSnippet.value)) {
-    return;
-  }
-
-  if (!sessionId.value || !referenceNumber.value) {
-    return;
-  }
+  if (hasStoredReferenceDetail(restoredFromStorage)) return;
+  if (!sessionId.value || !referenceNumber.value) return;
 
   loading.value = true;
 
@@ -108,19 +127,9 @@ async function loadReferenceDetail() {
       return;
     }
 
-    fileName.value = data.fileName || fileName.value;
-    fileMd5.value = data.fileMd5 || fileMd5.value;
-    pageNumber.value = data.pageNumber || pageNumber.value;
-    anchorText.value = data.anchorText || anchorText.value;
-    retrievalMode.value = data.retrievalMode ?? null;
-    retrievalLabel.value = data.retrievalLabel || '';
-    retrievalQuery.value = data.retrievalQuery || '';
-    evidenceSnippet.value = data.evidenceSnippet || '';
-    matchedChunkText.value = data.matchedChunkText || '';
-    score.value = data.score ?? null;
-    chunkId.value = data.chunkId ?? null;
-  } catch (error: any) {
-    loadError.value = error?.message || $t('page.chat.reference.loadFailed');
+    applyReferenceDetail(data);
+  } catch (error: unknown) {
+    loadError.value = getErrorMessage(error);
   } finally {
     loading.value = false;
   }
@@ -137,8 +146,8 @@ function handleBack() {
 
 watch(
   () => route.query,
-  () => {
-    void loadReferenceDetail();
+  async () => {
+    await loadReferenceDetail();
   },
   { immediate: true }
 );

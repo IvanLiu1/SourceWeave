@@ -180,6 +180,40 @@ interface TextLine {
   centerY: number;
 }
 
+interface HighlightLayerInput {
+  container: HTMLElement;
+  textDivs: HTMLElement[];
+  textItems: string[];
+}
+
+interface NormalizedAnchor {
+  normalized: string;
+  compact: string;
+}
+
+interface ParagraphMatch {
+  rect: HighlightRect;
+  firstElement?: HTMLElement;
+  score: number;
+}
+
+interface ParagraphWindowState {
+  mergedText: string;
+  mergedCompactText: string;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  firstElement?: HTMLElement;
+}
+
+interface FuzzyMatchCandidate {
+  start: number;
+  end: number;
+  score: number;
+  weightedScore: number;
+}
+
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
@@ -290,19 +324,19 @@ watch(
   async visible => {
     if (!visible || !pdfDocument.value) return;
     await nextTick();
-    void scheduleRender({ immediate: true });
+    scheduleRender({ immediate: true });
   }
 );
 
 watch(currentPage, () => {
   if (!pdfDocument.value) return;
-  void scheduleRender({ immediate: true });
+  scheduleRender({ immediate: true });
   scheduleSummaryLoading(getPrioritySummaryPages(currentPage.value), { prioritize: true });
 });
 
 watch(zoom, () => {
   if (!pdfDocument.value) return;
-  void scheduleRender({ immediate: true });
+  scheduleRender({ immediate: true });
 });
 
 watchEffect(() => {
@@ -317,12 +351,12 @@ useResizeObserver(stageRef, entries => {
   if (Math.abs(observedWidth - lastObservedStageWidth) < 2) return;
 
   lastObservedStageWidth = observedWidth;
-  void scheduleRender({ delay: 120 });
+  scheduleRender({ delay: 120 });
 });
 
-onBeforeUnmount(() => {
-  lifecycleToken++;
-  void cleanupPdfState();
+onBeforeUnmount(async () => {
+  lifecycleToken += 1;
+  await cleanupPdfState();
 });
 
 function clampPage(page: number, maxPage: number) {
@@ -467,9 +501,9 @@ function scheduleSummaryLoading(pageNumbers: number[], options?: { delay?: numbe
     window.clearTimeout(summaryLoadTimer);
   }
 
-  summaryLoadTimer = window.setTimeout(() => {
+  summaryLoadTimer = window.setTimeout(async () => {
     summaryLoadTimer = null;
-    void flushSummaryQueue();
+    await flushSummaryQueue();
   }, options?.delay ?? 0);
 }
 
@@ -496,30 +530,39 @@ async function loadQueuedSummaries() {
   const documentProxy = pdfDocument.value;
   if (!documentProxy) return;
 
-  while (summaryQueue.length && pdfDocument.value === documentProxy && props.visible !== false) {
-    const pageNumber = summaryQueue.shift();
-    if (!pageNumber || summaryLoadedPages.has(pageNumber) || summaryLoadingPages.has(pageNumber)) continue;
+  await loadNextQueuedSummary(documentProxy);
+}
 
-    summaryLoadingPages.add(pageNumber);
+async function loadNextQueuedSummary(documentProxy: PDFDocumentProxy): Promise<void> {
+  if (!summaryQueue.length || pdfDocument.value !== documentProxy || props.visible === false) return;
 
-    try {
-      const page = await documentProxy.getPage(pageNumber);
-      if (pdfDocument.value !== documentProxy) return;
-
-      const textContent = await page.getTextContent();
-      if (pdfDocument.value !== documentProxy) return;
-
-      updatePageSummary(pageNumber, textContent.items);
-    } catch (error) {
-      pageSummaries.value[pageNumber - 1] = {
-        pageNumber,
-        summary: ''
-      };
-      summaryLoadedPages.add(pageNumber);
-    } finally {
-      summaryLoadingPages.delete(pageNumber);
-    }
+  const pageNumber = summaryQueue.shift();
+  if (!pageNumber || summaryLoadedPages.has(pageNumber) || summaryLoadingPages.has(pageNumber)) {
+    await loadNextQueuedSummary(documentProxy);
+    return;
   }
+
+  summaryLoadingPages.add(pageNumber);
+
+  try {
+    const page = await documentProxy.getPage(pageNumber);
+    if (pdfDocument.value !== documentProxy) return;
+
+    const textContent = await page.getTextContent();
+    if (pdfDocument.value !== documentProxy) return;
+
+    updatePageSummary(pageNumber, textContent.items);
+  } catch {
+    pageSummaries.value[pageNumber - 1] = {
+      pageNumber,
+      summary: ''
+    };
+    summaryLoadedPages.add(pageNumber);
+  } finally {
+    summaryLoadingPages.delete(pageNumber);
+  }
+
+  await loadNextQueuedSummary(documentProxy);
 }
 
 function goToPage(page: number) {
@@ -636,7 +679,7 @@ async function loadDocument(url: string) {
   }
 }
 
-async function scheduleRender(options?: { immediate?: boolean; delay?: number }) {
+function scheduleRender(options?: { immediate?: boolean; delay?: number }) {
   if (!pdfDocument.value || documentLoading.value || props.visible === false) return;
 
   queuedRenderVersion += 1;
@@ -647,9 +690,9 @@ async function scheduleRender(options?: { immediate?: boolean; delay?: number })
     window.clearTimeout(renderTimer);
   }
 
-  renderTimer = window.setTimeout(() => {
+  renderTimer = window.setTimeout(async () => {
     renderTimer = null;
-    void flushRenderQueue(renderVersion);
+    await flushRenderQueue(renderVersion);
   }, delay);
 }
 
@@ -675,6 +718,7 @@ async function flushRenderQueue(renderVersion: number, expectedToken = lifecycle
 
   const renderPromise = renderCurrentPage(expectedToken, renderVersion);
   activeRenderPromise = renderPromise;
+  let shouldRenderAgain = false;
 
   try {
     await renderPromise;
@@ -683,45 +727,60 @@ async function flushRenderQueue(renderVersion: number, expectedToken = lifecycle
       activeRenderPromise = null;
     }
 
-    const shouldRenderAgain =
+    shouldRenderAgain =
       rerenderAfterCurrent || (queuedRenderVersion > activeRenderVersion && expectedToken === lifecycleToken);
 
     rerenderAfterCurrent = false;
+  }
 
-    if (shouldRenderAgain && pdfDocument.value && !documentLoading.value) {
-      await waitForAnimationFrame();
-      await flushRenderQueue(queuedRenderVersion, lifecycleToken);
-      return;
-    }
+  if (shouldRenderAgain && pdfDocument.value && !documentLoading.value) {
+    await waitForAnimationFrame();
+    await flushRenderQueue(queuedRenderVersion, lifecycleToken);
+    return;
+  }
 
-    if (expectedToken === lifecycleToken) {
-      pageRendering.value = false;
-    }
+  if (expectedToken === lifecycleToken) {
+    pageRendering.value = false;
   }
 }
 
-async function renderCurrentPage(expectedToken = lifecycleToken, renderVersion = queuedRenderVersion) {
+function getRenderElements() {
   const documentProxy = pdfDocument.value;
   const canvas = canvasRef.value;
   const textLayer = textLayerRef.value;
-  let stage = stageRef.value;
+  const stage = stageRef.value;
 
-  if (!documentProxy || !canvas || !textLayer || !stage) return;
+  if (!documentProxy || !canvas || !textLayer || !stage) return null;
+  return { documentProxy, canvas, textLayer, stage };
+}
+
+function resetActiveRenderTasks() {
+  renderTask?.cancel();
+  renderTask = null;
+  textLayerTask?.cancel();
+  textLayerTask = null;
+}
+
+function isStaleRender(expectedToken: number, renderVersion: number) {
+  return expectedToken !== lifecycleToken || renderVersion !== activeRenderVersion;
+}
+
+async function renderCurrentPage(expectedToken = lifecycleToken, renderVersion = queuedRenderVersion) {
+  const elements = getRenderElements();
+  if (!elements) return;
+  const { documentProxy, canvas, textLayer } = elements;
 
   highlightCount.value = 0;
   highlightRects.value = [];
 
   try {
-    renderTask?.cancel();
-    renderTask = null;
-    textLayerTask?.cancel();
-    textLayerTask = null;
+    resetActiveRenderTasks();
 
     const page = await documentProxy.getPage(currentPage.value);
     if (expectedToken !== lifecycleToken) return;
 
     await waitForStageReady(expectedToken);
-    stage = stageRef.value;
+    const stage = stageRef.value;
     if (!stage || expectedToken !== lifecycleToken) return;
 
     const baseViewport = page.getViewport({ scale: 1 });
@@ -764,7 +823,7 @@ async function renderCurrentPage(expectedToken = lifecycleToken, renderVersion =
     });
 
     await renderTask.promise;
-    if (expectedToken !== lifecycleToken || renderVersion !== activeRenderVersion) return;
+    if (isStaleRender(expectedToken, renderVersion)) return;
 
     const textContent = await page.getTextContent({
       includeMarkedContent: true
@@ -779,11 +838,11 @@ async function renderCurrentPage(expectedToken = lifecycleToken, renderVersion =
 
     await textLayerTask.render();
     await nextTick();
-    if (expectedToken !== lifecycleToken || renderVersion !== activeRenderVersion) return;
+    if (isStaleRender(expectedToken, renderVersion)) return;
     lastSuccessfulRenderSignature = renderSignature;
     highlightCount.value = applyHighlight();
   } catch (error: any) {
-    if (isBenignRenderError(error) || expectedToken !== lifecycleToken || renderVersion !== activeRenderVersion) {
+    if (isBenignRenderError(error) || isStaleRender(expectedToken, renderVersion)) {
       return;
     }
     console.error('[PDF 预览] 页面渲染失败:', error);
@@ -802,12 +861,12 @@ function applyHighlight() {
   if (!candidates.length) return 0;
 
   const directSource = props.searchText || props.anchorText || '';
-  const directMatch = resolveDirectClueHighlight(
-    textLayer,
-    textLayerTask.textDivs,
-    textLayerTask.textContentItemsStr,
-    directSource
-  );
+  const directMatch = resolveDirectClueHighlight({
+    container: textLayer,
+    textDivs: textLayerTask.textDivs,
+    textItems: textLayerTask.textContentItemsStr,
+    clueText: directSource
+  });
   if (directMatch) {
     highlightRects.value = [directMatch.rect];
     directMatch.firstElement?.scrollIntoView({
@@ -817,7 +876,12 @@ function applyHighlight() {
     return 1;
   }
 
-  const paragraphMatch = resolveParagraphHighlight(textLayer, textLayerTask.textDivs, textLayerTask.textContentItemsStr, candidates);
+  const paragraphMatch = resolveParagraphHighlight({
+    container: textLayer,
+    textDivs: textLayerTask.textDivs,
+    textItems: textLayerTask.textContentItemsStr,
+    anchors: candidates
+  });
   if (paragraphMatch) {
     highlightRects.value = [paragraphMatch.rect];
     paragraphMatch.firstElement?.scrollIntoView({
@@ -877,12 +941,12 @@ function applyHighlight() {
   return highlightRects.value.length;
 }
 
-function resolveDirectClueHighlight(
-  container: HTMLElement,
-  textDivs: HTMLElement[],
-  textItems: string[],
-  clueText: string
-) {
+function resolveDirectClueHighlight({
+  container,
+  textDivs,
+  textItems,
+  clueText
+}: HighlightLayerInput & { clueText: string }) {
   const compactClue = compactForMatch(clueText);
   if (compactClue.length < 8) return null;
 
@@ -949,36 +1013,34 @@ function resolveDirectClueHighlight(
 function resolveMatchRange(target: string, anchors: string[]): [number, number] | null {
   if (!target || !anchors.length) return null;
 
-  for (const anchor of anchors) {
-    if (!anchor) continue;
-
+  for (const anchor of anchors.filter(Boolean)) {
     const exactMatchIndex = target.indexOf(anchor);
     if (exactMatchIndex >= 0) {
       return [exactMatchIndex, exactMatchIndex + anchor.length];
     }
 
     const partialAnchor = anchor.slice(0, Math.min(anchor.length, 48)).trim();
-    if (partialAnchor.length < 8) continue;
-
-    const partialMatchIndex = target.indexOf(partialAnchor);
-    if (partialMatchIndex >= 0) {
-      return [partialMatchIndex, partialMatchIndex + partialAnchor.length];
+    if (partialAnchor.length >= 8) {
+      const partialMatchIndex = target.indexOf(partialAnchor);
+      if (partialMatchIndex >= 0) {
+        return [partialMatchIndex, partialMatchIndex + partialAnchor.length];
+      }
     }
   }
 
   return resolveFuzzyMatchRange(target, anchors);
 }
 
-function resolveParagraphHighlight(
-  container: HTMLElement,
-  textDivs: HTMLElement[],
-  textItems: string[],
-  anchors: string[]
-) {
+function resolveParagraphHighlight({
+  container,
+  textDivs,
+  textItems,
+  anchors
+}: HighlightLayerInput & { anchors: string[] }) {
   const lines = buildTextLines(container, textDivs, textItems);
   if (!lines.length) return null;
 
-  const normalizedAnchors = anchors
+  const normalizedAnchors: NormalizedAnchor[] = anchors
     .map(anchor => ({
       normalized: normalizeForMatch(anchor),
       compact: compactForMatch(anchor)
@@ -987,95 +1049,143 @@ function resolveParagraphHighlight(
     .sort((left, right) => right.compact.length - left.compact.length);
 
   if (!normalizedAnchors.length) return null;
-  const primaryAnchor = normalizedAnchors[0];
-  const secondaryAnchors = normalizedAnchors.slice(1);
+  const [primaryAnchor, ...secondaryAnchors] = normalizedAnchors;
+  if (!primaryAnchor) return null;
 
+  return findBestParagraphMatch({
+    container,
+    lines,
+    primaryAnchor,
+    secondaryAnchors
+  });
+}
+
+function createParagraphWindow(): ParagraphWindowState {
+  return {
+    mergedText: '',
+    mergedCompactText: '',
+    left: Number.POSITIVE_INFINITY,
+    right: 0,
+    top: Number.POSITIVE_INFINITY,
+    bottom: 0
+  };
+}
+
+function appendLineToParagraphWindow(state: ParagraphWindowState, line: TextLine) {
+  if (state.mergedText) {
+    state.mergedText += ' ';
+  }
+  state.mergedText += line.text;
+  state.mergedCompactText += line.compactText;
+  state.left = Math.min(state.left, line.rect.left);
+  state.top = Math.min(state.top, line.rect.top);
+  state.right = Math.max(state.right, line.rect.left + line.rect.width);
+  state.bottom = Math.max(state.bottom, line.rect.top + line.rect.height);
+  state.firstElement ??= line.elements[0];
+}
+
+function isParagraphWindowBoundary(previousLine: TextLine | null, line: TextLine) {
+  if (!previousLine) return false;
+
+  const previousBottom = previousLine.rect.top + previousLine.rect.height;
+  const verticalGap = line.rect.top - previousBottom;
+  const continuityTolerance = Math.max(10, Math.min(previousLine.rect.height, line.rect.height) * 1.2);
+  if (verticalGap > continuityTolerance) return true;
+
+  return isLikelyListStart(line.rawText) && /[。！？!?]$/.test(previousLine.rawText.trim());
+}
+
+function getPrimaryMatchMinimum(anchorLength: number) {
+  if (anchorLength >= 40) return 0.3;
+  if (anchorLength >= 20) return 0.38;
+  return 0.5;
+}
+
+function selectHigherScoredMatch(current: ParagraphMatch | null, candidate: ParagraphMatch | null) {
+  if (!candidate) return current;
+  return !current || candidate.score > current.score ? candidate : current;
+}
+
+function evaluateParagraphWindow({
+  container,
+  state,
+  line,
+  primaryAnchor,
+  secondaryAnchors
+}: {
+  container: HTMLElement;
+  state: ParagraphWindowState;
+  line: TextLine;
+  primaryAnchor: NormalizedAnchor;
+  secondaryAnchors: NormalizedAnchor[];
+}) {
+  const emptyResult = { primary: null, fallback: null, shouldStop: false };
+  if (state.mergedCompactText.length < 6) return emptyResult;
+
+  const primaryScore = scoreAgainstAnchor(state.mergedText, state.mergedCompactText, primaryAnchor);
+  const secondaryScore = secondaryAnchors.length
+    ? scoreParagraphMatch(state.mergedText, state.mergedCompactText, secondaryAnchors)
+    : 0;
+  const score = Math.max(primaryScore * 1.12, secondaryScore);
+  if (score <= 0) return emptyResult;
+
+  const rect = clampRectToContainer(
+    {
+      left: state.left - 6,
+      top: state.top - 5,
+      width: state.right - state.left + 12,
+      height: state.bottom - state.top + 24
+    },
+    container.clientWidth,
+    container.clientHeight
+  );
+  const firstElement = state.firstElement;
+  let primary: ParagraphMatch | null = null;
+  let fallback: ParagraphMatch | null = null;
+
+  if (primaryScore >= getPrimaryMatchMinimum(primaryAnchor.compact.length)) {
+    primary = { rect, firstElement, score };
+  } else if (secondaryScore >= 0.62) {
+    fallback = { rect, firstElement, score: secondaryScore };
+  }
+
+  const shouldStop =
+    state.mergedCompactText.includes(primaryAnchor.compact) ||
+    (/[。！？!?]$/.test(line.rawText.trim()) && primaryScore >= 0.52);
+
+  return { primary, fallback, shouldStop };
+}
+
+function findBestParagraphMatch({
+  container,
+  lines,
+  primaryAnchor,
+  secondaryAnchors
+}: {
+  container: HTMLElement;
+  lines: TextLine[];
+  primaryAnchor: NormalizedAnchor;
+  secondaryAnchors: NormalizedAnchor[];
+}) {
   const maxWindowSize = Math.min(6, lines.length);
-  let bestPrimaryMatch: { rect: HighlightRect; firstElement?: HTMLElement; score: number } | null = null;
-  let bestFallbackMatch: { rect: HighlightRect; firstElement?: HTMLElement; score: number } | null = null;
+  let bestPrimaryMatch: ParagraphMatch | null = null;
+  let bestFallbackMatch: ParagraphMatch | null = null;
 
   for (let start = 0; start < lines.length; start += 1) {
-    let mergedText = '';
-    let mergedCompactText = '';
-    let left = Number.POSITIVE_INFINITY;
-    let right = 0;
-    let top = Number.POSITIVE_INFINITY;
-    let bottom = 0;
-    let firstElement: HTMLElement | undefined;
+    const state = createParagraphWindow();
 
     for (let end = start; end < Math.min(lines.length, start + maxWindowSize); end += 1) {
       const line = lines[end];
       const previousLine = end > start ? lines[end - 1] : null;
-      if (previousLine) {
-        const previousBottom = previousLine.rect.top + previousLine.rect.height;
-        const verticalGap = line.rect.top - previousBottom;
-        const continuityTolerance = Math.max(10, Math.min(previousLine.rect.height, line.rect.height) * 1.2);
-        if (verticalGap > continuityTolerance) {
-          break;
-        }
-      }
+      if (isParagraphWindowBoundary(previousLine, line)) break;
 
-      if (previousLine && isLikelyListStart(line.rawText) && /[。！？!?]$/.test(previousLine.rawText.trim())) {
-        break;
-      }
-
-      if (mergedText) {
-        mergedText += ' ';
-      }
-      mergedText += line.text;
-      mergedCompactText += line.compactText;
-
-      left = Math.min(left, line.rect.left);
-      top = Math.min(top, line.rect.top);
-      right = Math.max(right, line.rect.left + line.rect.width);
-      bottom = Math.max(bottom, line.rect.top + line.rect.height);
-      firstElement ??= line.elements[0];
-
-      if (mergedCompactText.length < 6) continue;
-
-      const primaryScore = scoreAgainstAnchor(mergedText, mergedCompactText, primaryAnchor);
-      const secondaryScore = secondaryAnchors.length
-        ? scoreParagraphMatch(mergedText, mergedCompactText, secondaryAnchors)
-        : 0;
-      const score = Math.max(primaryScore * 1.12, secondaryScore);
-      if (score <= 0) continue;
-
-      const paddedRect = clampRectToContainer(
-        {
-          left: left - 6,
-          top: top - 5,
-          width: right - left + 12,
-          height: bottom - top + 24
-        },
-        container.clientWidth,
-        container.clientHeight
-      );
-
-      const primaryMinimum = primaryAnchor.compact.length >= 40 ? 0.3 : primaryAnchor.compact.length >= 20 ? 0.38 : 0.5;
-      if (primaryScore >= primaryMinimum) {
-        if (!bestPrimaryMatch || score > bestPrimaryMatch.score) {
-          bestPrimaryMatch = {
-            rect: paddedRect,
-            firstElement,
-            score
-          };
-        }
-      } else if (secondaryScore >= 0.62 && (!bestFallbackMatch || secondaryScore > bestFallbackMatch.score)) {
-        bestFallbackMatch = {
-          rect: paddedRect,
-          firstElement,
-          score: secondaryScore
-        };
-      }
+      appendLineToParagraphWindow(state, line);
+      const evaluation = evaluateParagraphWindow({ container, state, line, primaryAnchor, secondaryAnchors });
+      bestPrimaryMatch = selectHigherScoredMatch(bestPrimaryMatch, evaluation.primary);
+      bestFallbackMatch = selectHigherScoredMatch(bestFallbackMatch, evaluation.fallback);
 
       // 当窗口文本已完整覆盖较长锚点时，避免继续扩大导致误框
-      if (primaryAnchor && mergedCompactText.includes(primaryAnchor.compact)) {
-        break;
-      }
-
-      if (/[。！？!?]$/.test(line.rawText.trim()) && primaryScore >= 0.52) {
-        break;
-      }
+      if (evaluation.shouldStop) break;
     }
   }
 
@@ -1151,7 +1261,7 @@ function buildTextLines(container: HTMLElement, textDivs: HTMLElement[], textIte
 function isLikelyListStart(text: string) {
   const value = text.trim();
   if (!value) return false;
-  return /^[•·●○▪▸\-–—\d]+[\.\)、\s]?/.test(value);
+  return /^[•·●○▪▸\d–—-]+[.)）、\s]?/.test(value);
 }
 
 function scoreParagraphMatch(text: string, compactText: string, anchors: Array<{ normalized: string; compact: string }>) {
@@ -1208,70 +1318,64 @@ function clampRectToContainer(rect: HighlightRect, maxWidth: number, maxHeight: 
   };
 }
 
+function selectBetterFuzzyMatch(
+  current: FuzzyMatchCandidate | null,
+  candidate: FuzzyMatchCandidate | null
+) {
+  if (!candidate) return current;
+  if (!current || candidate.weightedScore > current.weightedScore) return candidate;
+  if (candidate.weightedScore === current.weightedScore && candidate.score > current.score) return candidate;
+  return current;
+}
+
+function findBestRangeForAnchor(
+  anchor: string,
+  ranges: Array<{ start: number; end: number; text: string }>
+) {
+  return ranges.reduce<FuzzyMatchCandidate | null>((bestMatch, range) => {
+    const score = calculateDiceCoefficient(anchor, range.text);
+    // 降低阈值，提高匹配的容错性
+    if (score < 0.12) return bestMatch;
+
+    return selectBetterFuzzyMatch(bestMatch, {
+      start: range.start,
+      end: range.end,
+      score,
+      weightedScore: score * Math.min(anchor.length, range.text.length)
+    });
+  }, null);
+}
+
+function meetsFuzzyMatchThreshold(anchorLength: number, score: number) {
+  if (anchorLength >= 18) return score >= 0.15;
+  if (anchorLength >= 12) return score >= 0.2;
+  return anchorLength >= 8 && score >= 0.25;
+}
+
 function resolveFuzzyMatchRange(target: string, anchors: string[]): [number, number] | null {
   const ranges = buildPhraseRanges(target);
   if (!ranges.length) return null;
 
-  interface FuzzyMatchCandidate {
-    start: number;
-    end: number;
-    score: number;
-    weightedScore: number;
-  }
-
   const sortedAnchors = [...anchors]
     .filter(anchor => anchor && anchor.length >= 6)
     .sort((left, right) => right.length - left.length);
-
   let bestMatch: FuzzyMatchCandidate | null = null;
 
   for (const anchor of sortedAnchors) {
-    let bestRangeForAnchor: FuzzyMatchCandidate | null = null;
-
-    for (const range of ranges) {
-      const score = calculateDiceCoefficient(anchor, range.text);
-      // 降低阈值，提高匹配的容错性
-      if (score < 0.12) continue;
-
-      const weightedScore = score * Math.min(anchor.length, range.text.length);
-      if (
-        !bestRangeForAnchor ||
-        weightedScore > bestRangeForAnchor.weightedScore ||
-        (weightedScore === bestRangeForAnchor.weightedScore && score > bestRangeForAnchor.score)
-      ) {
-        bestRangeForAnchor = {
-          start: range.start,
-          end: range.end,
-          score,
-          weightedScore
-        };
+    const bestRangeForAnchor = findBestRangeForAnchor(anchor, ranges);
+    if (bestRangeForAnchor) {
+      if (meetsFuzzyMatchThreshold(anchor.length, bestRangeForAnchor.score)) {
+        return [bestRangeForAnchor.start, bestRangeForAnchor.end];
       }
-    }
-
-    if (!bestRangeForAnchor) continue;
-
-    // 对于较长的文本，降低匹配分数要求
-    if (
-      (anchor.length >= 18 && bestRangeForAnchor.score >= 0.15) ||
-      (anchor.length >= 12 && bestRangeForAnchor.score >= 0.2) ||
-      (anchor.length >= 8 && bestRangeForAnchor.score >= 0.25)
-    ) {
-      return [bestRangeForAnchor.start, bestRangeForAnchor.end];
-    }
-
-    if (
-      !bestMatch ||
-      bestRangeForAnchor.weightedScore > bestMatch.weightedScore ||
-      (bestRangeForAnchor.weightedScore === bestMatch.weightedScore && bestRangeForAnchor.score > bestMatch.score)
-    ) {
-      bestMatch = bestRangeForAnchor;
+      bestMatch = selectBetterFuzzyMatch(bestMatch, bestRangeForAnchor);
     }
   }
 
   // 返回最佳匹配，即使分数不高（只要有匹配就返回）
-  return bestMatch && bestMatch.score >= 0.15
-    ? [bestMatch.start, bestMatch.end]
-    : null;
+  if (bestMatch && bestMatch.score >= 0.15) {
+    return [bestMatch.start, bestMatch.end];
+  }
+  return null;
 }
 
 function buildPhraseRanges(target: string) {
@@ -1282,16 +1386,16 @@ function buildPhraseRanges(target: string) {
   for (const match of target.matchAll(urlPattern)) {
     const url = match[0]?.trim();
     const start = match.index ?? -1;
-    if (!url || start < 0) continue;
-
-    const normalized = normalizeForMatch(url);
-    if (normalized.length < 8) continue;
-
-    ranges.push({
-      start,
-      end: start + url.length,
-      text: normalized
-    });
+    if (url && start >= 0) {
+      const normalized = normalizeForMatch(url);
+      if (normalized.length >= 8) {
+        ranges.push({
+          start,
+          end: start + url.length,
+          text: normalized
+        });
+      }
+    }
   }
 
   // 使用URL占位符替换，避免被分割
@@ -1303,16 +1407,16 @@ function buildPhraseRanges(target: string) {
   for (const match of urlPlaceholders.matchAll(phrasePattern)) {
     const text = match[0]?.trim();
     const start = match.index ?? -1;
-    if (!text || start < 0 || text.includes('__URL__')) continue;
-
-    const normalized = normalizeForMatch(text);
-    if (normalized.length < 6) continue;
-
-    ranges.push({
-      start,
-      end: start + match[0].length,
-      text: normalized
-    });
+    if (text && start >= 0 && !text.includes('__URL__')) {
+      const normalized = normalizeForMatch(text);
+      if (normalized.length >= 6) {
+        ranges.push({
+          start,
+          end: start + match[0].length,
+          text: normalized
+        });
+      }
+    }
   }
 
   return ranges;
@@ -1353,25 +1457,22 @@ function buildBigrams(value: string) {
   return bigrams;
 }
 
-async function waitForStageReady(expectedToken = lifecycleToken) {
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    if (expectedToken !== lifecycleToken) return;
+async function waitForStageReady(expectedToken = lifecycleToken, remainingAttempts = 24): Promise<void> {
+  if (expectedToken !== lifecycleToken || remainingAttempts <= 0) return;
 
-    const stage = stageRef.value;
-    const shell = pageShellRef.value;
-    const hasStableStage =
-      Boolean(stage) &&
-      Boolean(shell) &&
-      stage!.clientWidth > 240 &&
-      stage!.clientHeight > 120 &&
-      stage!.getClientRects().length > 0;
+  const stage = stageRef.value;
+  const shell = pageShellRef.value;
+  const hasStableStage =
+    Boolean(stage) &&
+    Boolean(shell) &&
+    stage!.clientWidth > 240 &&
+    stage!.clientHeight > 120 &&
+    stage!.getClientRects().length > 0;
 
-    if (hasStableStage) {
-      return;
-    }
+  if (hasStableStage) return;
 
-    await waitForAnimationFrame();
-  }
+  await waitForAnimationFrame();
+  await waitForStageReady(expectedToken, remainingAttempts - 1);
 }
 
 function waitForAnimationFrame() {
