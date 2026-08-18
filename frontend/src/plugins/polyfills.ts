@@ -10,6 +10,7 @@
 // 1) Map.prototype.getOrInsertComputed（TC39 "upsert" 提案）
 // pdf.js 的 MessageHandler 直接调用，缺失时渲染抛 "getOrInsertComputed is not a function"。
 if (typeof (Map.prototype as { getOrInsertComputed?: unknown }).getOrInsertComputed !== 'function') {
+  // eslint-disable-next-line no-extend-native -- pdf.js requires this standards-track polyfill in older browsers.
   Object.defineProperty(Map.prototype, 'getOrInsertComputed', {
     value<K, V>(this: Map<K, V>, key: K, callback: (key: K) => V): V {
       if (!this.has(key)) {
@@ -30,7 +31,10 @@ if (
   typeof ReadableStream !== 'undefined' &&
   typeof (ReadableStream.prototype as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] !== 'function'
 ) {
-  const asyncIterator = function (this: ReadableStream, options?: { preventCancel?: boolean }) {
+  const asyncIterator = function asyncIterator(
+    this: ReadableStream,
+    options?: { preventCancel?: boolean }
+  ) {
     const preventCancel = options?.preventCancel ?? false;
     const reader = this.getReader();
     return {
