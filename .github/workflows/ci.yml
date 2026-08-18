@@ -9,9 +9,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   backend:
-    name: backend-test
+    name: backend-verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +26,8 @@ jobs:
           cache: maven
 
       # 测试自包含:H2 内存库 + fail-soft 启动自检,无需 MySQL/ES/Kafka/MinIO/Redis
-      - name: Run backend tests
-        run: mvn -B -ntp test
+      - name: Verify backend
+        run: mvn -B -ntp verify
 
   frontend:
     name: frontend-check
@@ -58,3 +61,29 @@ jobs:
 
       - name: Type check
         run: pnpm typecheck
+
+  rag-evaluation-tools:
+    name: rag-evaluation-tools-offline-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 仅验证本地数据准备、结果合并和评分逻辑；不生成回答，也不调用任何模型 API。
+      - name: Run offline RAG evaluation tool tests
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+  deployment-config:
+    name: deployment-config-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 示例文件故意留空生产密钥；这里只注入非生产占位值来验证 Compose 插值和结构。
+      - name: Validate Docker Compose configuration
+        env:
+          JWT_SECRET_KEY: Y2ktb25seS1ub24tcHJvZHVjdGlvbi1kdW1teS1rZXktMzI=
+        run: docker compose --env-file .env.docker.example config --quiet
